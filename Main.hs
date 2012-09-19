@@ -102,6 +102,7 @@ readList f p = (TIO.readFile . toString . toTextIgnore $ p)
 --   within a ZFS 'Store', or synced to the same path in a non-ZFS 'Store'.
 
 data Fileset = Fileset { _filesetName      :: Text
+                       , _filesetPriority  :: Int
                        , _filesetClass     :: Text
                        , _filesetPath      :: FilePath
                        , _filesetStorePath :: Maybe FilePath }
@@ -111,8 +112,9 @@ makeLenses ''Fileset
 
 filesetToText :: Fileset -> Text
 filesetToText x =
-  format "{}:{}:{}:{}"
+  format "{}:{}:{}:{}:{}"
          [ x^.filesetName
+         , (T.pack . show) (x^.filesetPriority)
          , x^.filesetClass
          , toTextIgnore (x^.filesetPath)
          , (T.pack . show) (toTextIgnore <$> (x^.filesetStorePath)) ]
@@ -120,10 +122,11 @@ filesetToText x =
 textToFileset :: Text -> Fileset
 textToFileset x =
   Fileset { _filesetName      = y^.element 0
-          , _filesetClass     = y^.element 1
-          , _filesetPath      = fromText (y^.element 2)
+          , _filesetPriority  = (read . T.unpack) (y^.element 1)
+          , _filesetClass     = y^.element 2
+          , _filesetPath      = fromText (y^.element 3)
           , _filesetStorePath =
-               fromText <$> ((read . T.unpack) (y^.element 3) :: Maybe Text) }
+               fromText <$> ((read . T.unpack) (y^.element 4) :: Maybe Text) }
   where y = splitOn ":" x
 
 doReadFilesets :: FilePath -> IO [Fileset]
@@ -473,7 +476,7 @@ syncFilesets this that fsets = do
                   when (not q || (fs^.filesetClass) == "quick") $
                     systemVolCopy (fs^.filesetName) (fs^.filesetPath)
                                   (genPath fs))
-          fsets
+          (L.sortBy (compare `on` (^.filesetPriority)) fsets)
 
   where genPath fs =
           if (this^.storeIsZFS) && (that^.storeIsZFS)
