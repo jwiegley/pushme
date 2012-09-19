@@ -500,7 +500,7 @@ systemVolCopy label src dest = do
 
 volcopy :: Bool -> [Text] -> Text -> Text -> Sh ()
 volcopy useSudo options src dest = errExit False $ escaping False $ do
-  infoL $ format "volcopy {} → {}" [src, dest]
+  noticeL $ format "volcopy {} → {}" [src, dest]
 
   dry  <- getOption dryRun
   verb <- getOption verbose
