@@ -20,25 +20,30 @@ Executable pushme
     Main-is: Main.hs
     Ghc-options: -threaded
 
-    Build-depends: base            >= 4 && < 5
-                 , cmdargs         >= 0.10
-                 , containers      >= 0.4.2
-                 , deepseq         >= 1.3
-                 , lens            >= 2.8
-                 , parallel-io     >= 0.3.2
-                 , pointless-fun   >= 1.1
-                 , hslogger        >= 1.2
-                 , text-format     >= 0.3
-                 , io-storage      >= 0.3
-                 , regex-posix     >= 0.95
-                 , system-fileio   >= 0.3.9
-                 , system-filepath >= 0.4.7
-                 , old-locale      >= 1.0.0
-                 , shelly          >= 0.14.0.1
-                 , text            >= 0.11.2
-                 , time            >= 1.4
-                 , stringable      >= 0.1
-                 , unix            >= 2.5.1
+    Build-depends: base                 >= 4 && < 5
+                 , aeson                >= 0.6.0
+                 , bytestring           >= 0.9.2
+                 , cmdargs              >= 0.10
+                 , containers           >= 0.4.2
+                 , deepseq              >= 1.3
+                 , ghc-paths            >= 0.1
+                 , hslogger             >= 1.2
+                 , io-storage           >= 0.3
+                 , lens                 >= 2.8
+                 , old-locale           >= 1.0.0
+                 , parallel-io          >= 0.3.2
+                 , pointless-fun        >= 1.1
+                 , regex-posix          >= 0.95
+                 , shelly               >= 0.14.0.1
+                 , stringable           >= 0.1
+                 , system-fileio        >= 0.3.9
+                 , system-filepath      >= 0.4.7
+                 , text                 >= 0.11.2
+                 , text-format          >= 0.3
+                 , time                 >= 1.4
+                 , unix                 >= 2.5.1
+                 , unordered-containers >= 0.2.2
+                 , yaml                 >= 0.8
 
 Source-repository head
   type:     git

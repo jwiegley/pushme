@@ -1,13 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
 
+import           Control.Applicative
 import           Control.Concurrent.ParallelIO
-import           Control.Lens
-import           Control.Monad hiding (sequence)
-import           Data.Char
+import           Control.Exception
+import           Control.Lens hiding (value)
+import           Control.Monad
+import           Data.Aeson hiding ((.:))
+import           Data.Aeson.TH
+import qualified Data.ByteString.Char8 as BC
+import           Data.Foldable
 import           Data.Function
 import           Data.Function.Pointless
 import qualified Data.List as L
@@ -16,15 +24,14 @@ import           Data.Monoid
 import           Data.Stringable as S hiding (fromText)
 import           Data.Text.Format
 import           Data.Text.Lazy as T
-import           Data.Text.Lazy.IO as TIO
 import           Data.Time.Clock
 import           Data.Time.Format
 import           Data.Time.LocalTime
-import           Filesystem hiding (readFile)
+import           Data.Yaml hiding ((.:))
+import           Filesystem
 import           Filesystem.Path.CurrentOS hiding (fromText, (</>))
 import           GHC.Conc
-import           Prelude hiding (FilePath, sequence, catch, putStrLn,
-                                 readFile, print)
+import           Prelude hiding (FilePath, catch)
 import           Shelly
 import           System.Console.CmdArgs
 import           System.Environment (getArgs, withArgs)
@@ -35,6 +42,7 @@ import           System.Log.Formatter
 import           System.Log.Handler (setFormatter)
 import           System.Log.Handler.Simple (streamHandler)
 import           System.Log.Logger
+import           Text.Printf
 import           Text.Regex.Posix
 
 default (Integer, Text)
@@ -47,14 +55,16 @@ copyright = "2012"
 
 pushmeSummary :: String
 pushmeSummary = "pushme v" ++ version ++ ", (C) John Wiegley " ++ copyright
-
+
 data PushmeOpts = PushmeOpts { jobs      :: Int
-                             , sendOnly  :: Bool
                              , dryRun    :: Bool
                              , quick     :: Bool
+                             , snapshot  :: Bool
+                             , stores    :: Bool
                              , filesets  :: String
                              , classes   :: String
                              , verbose   :: Bool
+                             , quiet     :: Bool
                              , debug     :: Bool
                              , arguments :: [String] }
                deriving (Data, Typeable, Show, Eq)
@@ -63,40 +73,28 @@ pushmeOpts :: PushmeOpts
 pushmeOpts = PushmeOpts
     { jobs      = def &= name "j" &= typ "INT"
                       &= help "Run INT concurrent finds at once (default: 2)"
-    , sendOnly  = def &= name "S"
-                      &= help "Do not create a new snapshot before sending"
     , dryRun    = def &= name "n"
                       &= help "Don't take any actions"
-    , quick     = def &= name "q"
+    , quick     = def &= name "Q"
                       &= help "Avoid expensive operations"
+    , snapshot  = def &= name "s"
+                      &= help "Don't sync to an rsync-zfs store, just snapshot"
+    , stores    = def &= help "Show all the stores know to pushme"
     , filesets  = def &= name "f"
                       &= help "Synchronize the given fileset(s) (comma-sep)"
     , classes   = def &= name "c"
                       &= help "Filesets classes to synchronize (comma-sep)"
     , verbose   = def &= name "v"
                       &= help "Report progress verbosely"
+    , quiet     = def &= name "q"
+                      &= help "Be a little quieter"
     , debug     = def &= name "D"
                       &= help "Report debug information"
-    , arguments = def &= args &= typ "ARGS..." } &=
-    summary pushmeSummary &=
-    program "pushme" &=
-    help "Synchronize data from one machine to another"
+    , arguments = def &= args &= typ "ARGS..." }
 
-currentLocalTime :: IO LocalTime
-currentLocalTime = do
-  tz <- getCurrentTimeZone
-  tm <- getCurrentTime
-  return $ utcToLocalTime tz tm
-
-writeList :: (a -> Text) -> FilePath -> [a] -> IO ()
-writeList f p =
-  (TIO.writeFile . toString . toTextIgnore $ p) . listToText
-  where listToText = T.unlines . L.map f
-
-readList :: (Text -> a) -> FilePath -> IO [a]
-readList f p = (TIO.readFile . toString . toTextIgnore $ p)
-                  >>= return . textToList
-  where textToList = L.map f . T.lines
+    &= summary pushmeSummary
+    &= program "pushme"
+    &= help "Synchronize data from one machine to another"
 
 -- | A 'Fileset' is a data source.  It can be synced to a 'filesetStorePath'
 --   within a ZFS 'Store', or synced to the same path in a non-ZFS 'Store'.
@@ -110,39 +108,13 @@ data Fileset = Fileset { _filesetName      :: Text
 
 makeLenses ''Fileset
 
-filesetToText :: Fileset -> Text
-filesetToText x =
-  format "{}:{}:{}:{}:{}"
-         [ x^.filesetName
-         , (T.pack . show) (x^.filesetPriority)
-         , x^.filesetClass
-         , toTextIgnore (x^.filesetPath)
-         , (T.pack . show) (toTextIgnore <$> (x^.filesetStorePath)) ]
+instance FromJSON FilePath where
+  parseJSON = parseJSON >=> return . fromText
 
-textToFileset :: Text -> Fileset
-textToFileset x =
-  Fileset { _filesetName      = y^.element 0
-          , _filesetPriority  = (read . T.unpack) (y^.element 1)
-          , _filesetClass     = y^.element 2
-          , _filesetPath      = fromText (y^.element 3)
-          , _filesetStorePath =
-               fromText <$> ((read . T.unpack) (y^.element 4) :: Maybe Text) }
-  where y = splitOn ":" x
+instance ToJSON FilePath where
+  toJSON = toJSON . toTextIgnore
 
-doReadFilesets :: FilePath -> IO [Fileset]
-doReadFilesets = readList textToFileset
-
-doWriteFilesets :: FilePath -> [Fileset] -> IO ()
-doWriteFilesets = writeList filesetToText
-
-getHomePath :: Text -> IO FilePath
-getHomePath p = getHomeDirectory >>= (return . (</> fromText p))
-
-readFilesetsFile :: Text -> IO [Fileset]
-readFilesetsFile = getHomePath >=> doReadFilesets
-
-writeFilesetsFile :: Text -> [Fileset] -> IO ()
-writeFilesetsFile p xs = getHomePath p >>= flip doWriteFilesets xs
+$(deriveJSON (L.drop 8) ''Fileset)
 
 -- | A 'Store' is a repository for holding 'Fileset' data.  Synchronization of
 --   a remote store is done by updating the host's local store, and then copy
@@ -153,11 +125,12 @@ writeFilesetsFile p xs = getHomePath p >>= flip doWriteFilesets xs
 --   'storeHosts' value.  Note that 'storeHosts' refers to names used by SSH.
 
 data Store = Store { _storeHostRe      :: Text
+                   , _storeSelfRe      :: Text
                    , _storeUserName    :: Text
                    , _storeHostName    :: Text -- set on load from command-line
                    , _storeIsLocal     :: Bool -- set on load
                    , _storeAlwaysLocal :: Bool
-                   , _storeIsZFS       :: Bool
+                   , _storeType        :: Text
                    , _storeZFSName     :: Text
                    , _storePath        :: FilePath
                    , _storeLastRev     :: Int
@@ -166,46 +139,18 @@ data Store = Store { _storeHostRe      :: Text
 
 makeLenses ''Store
 
-storeToText :: Store -> Text
-storeToText x =
-  format "{}:{}:{}:{}:{}:{}:{}:{}"
-         [ (x^.storeHostRe)
-         , (x^.storeUserName)
-         , (T.pack . show) (x^.storeAlwaysLocal)
-         , (T.pack . show) (x^.storeIsZFS)
-         , (x^.storeZFSName)
-         , toTextIgnore (x^.storePath)
-         , (T.pack . show) (x^.storeLastRev)
-         , (T.pack . formatTime defaultTimeLocale "%Y%m%dT%H%M%S")
-           (x^.storeLastSync) ]
+instance FromJSON LocalTime where
+  parseJSON =
+    parseJSON >=> return . readTime defaultTimeLocale "%Y%m%dT%H%M%S"
 
-textToStore :: Text -> Store
-textToStore x =
-  Store { _storeHostRe      = (y^.element 0)
-        , _storeUserName    = (y^.element 1)
-        , _storeHostName    = T.empty
-        , _storeIsLocal     = False
-        , _storeAlwaysLocal = (read . T.unpack) (y^.element 2)
-        , _storeIsZFS       = (read . T.unpack) (y^.element 3)
-        , _storeZFSName     = (y^.element 4)
-        , _storePath        = fromText (y^.element 5)
-        , _storeLastRev     = (read . T.unpack) (y^.element 6)
-        , _storeLastSync    =
-          (readTime defaultTimeLocale "%Y%m%dT%H%M%S" . T.unpack)
-          (y^.element 7) }
-  where y = splitOn ":" x
+instance ToJSON LocalTime where
+  toJSON = toJSON . formatTime defaultTimeLocale "%Y%m%dT%H%M%S"
 
-doReadStores :: FilePath -> IO [Store]
-doReadStores = readList textToStore
+$(deriveJSON (L.drop 6) ''Store)
 
-doWriteStores :: FilePath -> [Store] -> IO ()
-doWriteStores = writeList storeToText
+data PushmeException = PushmeException deriving (Show, Typeable)
 
-readStoresFile :: Text -> IO [Store]
-readStoresFile = getHomePath >=> doReadStores
-
-writeStoresFile :: Text -> [Store] -> IO ()
-writeStoresFile p xs = getHomePath p >>= flip doWriteStores xs
+instance Exception PushmeException
 
 main :: IO ()
 main = do
@@ -215,18 +160,31 @@ main = do
   procs    <- GHC.Conc.getNumProcessors
   _        <- GHC.Conc.setNumCapabilities $
               case jobs opts of 0 -> min procs 1; x -> x
-  runPushme opts
+
+  catchany (runPushme opts) (const $ return ())
+
+testme :: IO ()
+testme = runPushme
+         PushmeOpts { jobs      = 1
+                    , dryRun    = True
+                    , quick     = True
+                    , snapshot  = False
+                    , stores    = False
+                    , filesets  = ""
+                    , classes   = ""
+                    , verbose   = True
+                    , quiet     = True
+                    , debug     = False
+                    , arguments = ["titan"] }
 
 runPushme :: PushmeOpts -> IO ()
 runPushme opts = do
-  let level = if debug opts
-              then DEBUG
-              else if verbose opts
-                   then INFO
-                   else NOTICE
-
-  h <- streamHandler System.IO.stderr level >>= \lh ->
-         return $ setFormatter lh (simpleLogFormatter "$time - [$prio] $msg")
+  let level
+        | debug opts   = DEBUG
+        | verbose opts = INFO
+        | otherwise    = NOTICE
+  h <- (`setFormatter` simpleLogFormatter "$time - [$prio] $msg")
+       <$> streamHandler System.IO.stderr level
 
   removeAllHandlers
   updateGlobalLogger "pushme" (setLevel level)
@@ -238,116 +196,309 @@ runPushme opts = do
     when (dryRun opts) $
       warningM "pushme" "`--dryrun' specified, no changes will be made!"
 
-    stores <- readStoresFile ".pushme/stores"
-    fsets  <- readFilesetsFile ".pushme/filesets"
+    sts   <- L.map ((storeIsLocal .~ False) . (storeHostName .~ ""))
+             <$> readDataFile ".pushme/stores.yaml" :: IO [Store]
+    fsets <- readDataFile ".pushme/filesets.yaml"     :: IO [Fileset]
 
-    stores'' <- shelly $ do
-      here <- cmd "hostname"
-      let (this, stores') = identifyStore here True stores
+    if stores opts
+      then
+        for_ sts $ \st -> shelly $ do
+          echo $ fromString $
+            printf (T.unpack "%-20s%5d%30s")
+                   (toString (st^.storeHostRe))
+                   (st^.storeLastRev)
+                   (formatTime defaultTimeLocale "%Y/%m/%d %H:%M:%S"
+                               (st^.storeLastSync))
 
-      debugL $ here <> " -> " <> fromString (show this)
+      else do
+        sts'' <- shelly $ silently $ do
+          here <- cmd "hostname"
+          let (this, sts') = identifyStore here True True sts
 
-      L.foldl' (processHost this fsets) (return stores')
-        (arguments opts)
+          debugL $ here <> " -> " <> fromString (show this)
 
-    writeStoresFile ".pushme/stores" stores''
+          L.foldl' (processHost this fsets) (return sts')
+                   (arguments opts)
+
+        unless (dryRun opts) $
+          writeDataFile ".pushme/stores.yaml" sts''
 
   stopGlobalPool
+
+processHost :: Store -> [Fileset] -> Sh [Store] -> String -> Sh [Store]
+processHost this fsets storesInSh host = do
+  sts <- storesInSh
+  let there = fromString host
+      (that, sts') =
+        identifyStore there False
+                      (matchText (this^.storeHostRe) there) sts
+
+  infoL $ "Synchronizing " <> there
+  debugL $ there <> " -> " <> fromString (show that)
+
+  snapshotOnly <- getOption snapshot
+
+  (this', that') <-
+    case that^.storeType of
+      "rsync"     -> (this,) <$> syncFilesets that fsets
+      "rsync-zfs" -> (this,) <$> ((if snapshotOnly
+                                   then return that
+                                   else syncFilesets that fsets)
+                                  >>= createSnapshot)
+      "zfs"       -> sendSnapshots this that
+
+      _ -> error $ "Unexpected: processHost: " ++ show that
+
+  -- Don't update both this and that if they refer to the same stores
+  -- entry.
+  let sts'' = if ((==) `on` (^.storeHostRe)) this' that'
+                 then sts'
+                 else replaceStore this this' sts'
+
+  return $ replaceStore that that' sts''
+
+  where replaceStore      = replaceElem ((==) `on` (^.storeHostRe))
+        replaceElem f x y = L.map (\z -> if f x z then y else z)
+
+identifyStore :: Text -> Bool -> Bool -> [Store] -> (Store, [Store])
+identifyStore hostname isSelf isLocal sts =
+  let (st', sts') =
+        L.foldr
+          (\st (x, xs) ->
+            if matchText (if isSelf
+                          then st^.storeSelfRe
+                          else st^.storeHostRe) hostname
+            then let y = modStore (st^.storeAlwaysLocal || isLocal) $
+                         storeHostName .~ hostname $ st
+                 in (Just y, y:xs)
+            else (x, modStore (st^.storeAlwaysLocal) st:xs))
+          (Nothing, []) sts
+  in case st' of
+    Nothing -> error $ toString $
+                format "Could not find hostname {} in ~/.pushme/stores"
+                       [hostname]
+    Just x  -> (x, sts')
+
+  where modStore = (storeIsLocal .~)
+
+createSnapshot :: Store -> Sh Store
+createSnapshot this
+  | this^.storeIsLocal = do
+    let nextRev      = succ (this^.storeLastRev)
+        thisSnapshot = (this^.storeZFSName) <> "@" <> intToText nextRev
+    noticeL $ format "Creating snapshot {}" [thisSnapshot]
+    vrun_ "sudo" ["zfs", "snapshot", "-r", thisSnapshot]
+    return $ storeLastRev .~ nextRev $ this
+
+  | otherwise =
+    error $ toString $
+      "Will not create snapshot on remote store: " <> show this
+
+sendSnapshots :: Store -> Store -> Sh (Store, Store)
+sendSnapshots this that
+  | (this^.storeIsLocal) && (that^.storeIsLocal) =
+    doSendSnapshots this that (that^.storeZFSName) $
+      return ["sudo", "zfs", "recv", "-d", "-F", that^.storeZFSName]
+
+  | (this^.storeIsLocal) && not (that^.storeIsLocal) =
+    doSendSnapshots this that (format "{}@{}:{}"
+                    [ that^.storeUserName
+                    , that^.storeHostName
+                    , that^.storeZFSName ]) $ do
+      ssh <- which "ssh"
+      return [ toTextIgnore (fromJust ssh)
+             , that^.storeHostName, "zfs", "recv", "-d", "-F"
+             , that^.storeZFSName ]
+
+  | otherwise =
+    error $ toString $
+    format "Cannot send from {} to {}" [show this, show that]
+
+doSendSnapshots :: Store -> Store -> Text -> Sh [Text] -> Sh (Store, Store)
+doSendSnapshots this that dest recvCmd
+  | this^.storeLastRev == that^.storeLastRev = return (this, that)
+
+  | otherwise = escaping False $ do
+    verb <- getOption verbose
+    let thatSnapshot =
+          (this^.storeZFSName) <> "@" <> intToText (that^.storeLastRev)
+        thisSnapshot =
+          (this^.storeZFSName) <> "@" <> intToText (this^.storeLastRev)
+        sendCmd =
+           if that^.storeLastRev == -1
+          then do noticeL $ format "Sending {} → {}" [thisSnapshot, dest]
+                  return ["sudo", "zfs", "send", thisSnapshot]
+          else do noticeL $ format "Sending {} to {} → {}"
+                                   [thatSnapshot, thisSnapshot, dest]
+                  return $ ["sudo", "zfs", "send", "-R"]
+                        <> ["-v" | verb]
+                        <> ["-I", thatSnapshot, thisSnapshot]
+
+    -- sendCmd -|- recvCmd
+    sendArgs <- sendCmd
+    recvArgs <- recvCmd
+    vrun_ (fromText (L.head sendArgs)) $
+      L.tail sendArgs <> ["|"] <> (if verb then ["pv", "|"] else [])
+                      <> recvArgs
+
+    now <- liftIO currentLocalTime
+    return ( this
+           , storeLastSync .~ now $
+             storeLastRev  .~ (this^.storeLastRev) $ that )
+
+syncFilesets :: Store -> [Fileset] -> Sh Store
+syncFilesets that fsets = do
+  liftIO $ parallel_ $
+    L.map (\fs ->
+            unless ((that^.storeType) == "rsync-zfs"
+                    && isNothing (fs^.filesetStorePath)) $ do
+              fss <- fromString <$> getOption' filesets
+              when (T.null fss || (fs^.filesetName) `isInfixOf` fss) $ do
+                cls <- fromString <$> getOption' classes
+                when (T.null cls || (fs^.filesetClass) `isInfixOf` cls) $ do
+                  q <- getOption' quick
+                  when (not q || (fs^.filesetClass) == "quick") $
+                    systemVolCopy (fs^.filesetName) (fs^.filesetPath)
+                                  (genPath that fs))
+          (L.sortBy (compare `on` (^.filesetPriority)) fsets)
+
+  now <- liftIO currentLocalTime
+  return $ storeLastSync .~ now $ that
+
+genPath :: Store -> Fileset -> Text
+genPath that fs =
+  case that^.storeType of
+    "rsync-zfs" ->
+      toTextIgnore (that^.storePath) <> "/"
+      <> (toTextIgnore . fromJust) (fs^.filesetStorePath)
+
+    "rsync" ->
+      if that^.storeIsLocal
+      then error $ "Unexpected: genPath: " ++ show that
+      else format "{}@{}:{}"
+                  [ that^.storeUserName
+                  , that^.storeHostName
+                  , toTextIgnore $ fs^.filesetPath ]
+
+    _ -> error $ "Unexpected: genPath: " ++ show that
+
+systemVolCopy :: Text -> FilePath -> Text -> IO ()
+systemVolCopy label src dest = do
+  optsFile <- liftIO $ getHomePath (".pushme/filters/" <> label)
+  exists   <- isFile optsFile
+  let rsyncOptions = ["--include-from=" <> toTextIgnore optsFile | exists]
+  shelly $ volcopy True rsyncOptions (toTextIgnore src) dest
+
+volcopy :: Bool -> [Text] -> Text -> Text -> Sh ()
+volcopy useSudo options src dest = errExit False $ escaping False $ do
+  noticeL $ format "volcopy {} → {}" [src, dest]
+
+  dry  <- getOption dryRun
+  verb <- getOption verbose
+  shhh <- getOption quiet
+
+  let toRemote = ":" `isInfixOf` dest
+      options' =
+        [ "-aHAXEy"
+        , "--fileflags"
+        , "--delete-after"
+        , "--ignore-errors"
+        , "--force-delete"
+
+        , "--exclude=/.Caches/"
+        , "--exclude=/.Spotlight-V100/"
+        , "--exclude=/.TemporaryItems/"
+        , "--exclude=/.Trash/"
+        , "--exclude=/.Trashes/"
+        , "--exclude=/.fseventsd/"
+        , "--exclude=/.zfs/"
+        , "--exclude='/Temporary Items/'"
+        , "--exclude='/Network Trash Folder/'"
+
+        , "--filter='-p .DS_Store'"
+        , "--filter='-p .localized'"
+        , "--filter='-p .AppleDouble/'"
+        , "--filter='-p .AppleDB/'"
+        , "--filter='-p .AppleDesktop/'"
+        , "--filter='-p .com.apple.timemachine.supported'" ]
+
+        <> ["-n" | dry]
+        <> (if shhh
+            then ["--stats"]
+            else if verb
+                 then ["-P"]
+                 else ["-v"])
+        <> options
+        <> [src, dest]
+
+  rsync <- which "rsync"
+  case rsync of
+    Nothing -> error "Could not find rsync!"
+    Just r  ->
+      if shhh
+      then silently $ do
+        output <- doCopy (drun False) r toRemote useSudo options'
+        let xfer = (read :: String -> Integer)
+                   . toString . (^. element 4) . T.words . L.head
+                   . L.filter ("Total transferred file size:" `isPrefixOf`)
+                   . T.lines $ output
+        noticeL $ format "Transferred {}" [humanReadable xfer]
+
+      else doCopy (drun_ False) r toRemote useSudo options'
 
   where
-    processHost this fsets storesInSh host = do
-      stores <- storesInSh
+    doCopy f rsync False False os = f rsync os
+    doCopy f rsync False True os  = sudo f rsync os
+    doCopy f rsync True False os  = f rsync (remoteRsync rsync:os)
+    doCopy f rsync True True os   = asRoot f rsync (remoteRsync rsync:os)
 
-      let there = fromString host
-          (that, stores') =
-            identifyStore there (matchText (this^.storeHostRe)
-                                           (fromString host)) stores
+    remoteRsync x = format "--rsync-path='sudo {}'" [toTextIgnore x]
+
+getHomePath :: Text -> IO FilePath
+getHomePath p = (</> fromText p) <$> getHomeDirectory
 
-      debugL $ there <> " -> " <> fromString (show that)
+convertPath :: FilePath -> String
+convertPath = toString
 
-      unless (sendOnly opts) $ syncFilesets this that fsets
+readDataFile :: FromJSON a => Text -> IO [a]
+readDataFile p = do
+  p' <- getHomePath p
+  fromJust <$> Data.Yaml.decode <$> BC.readFile (convertPath p')
 
-      echo $ this^.storeHostName
-      echo $ that^.storeHostName
+writeDataFile :: ToJSON a => Text -> a -> IO ()
+writeDataFile p xs =
+  getHomePath p >>= flip BC.writeFile (Data.Yaml.encode xs) . convertPath
 
-      let thisIsThat = (this^.storeHostRe) == (that^.storeHostRe)
-      if that^.storeIsZFS
-        then if sendOnly opts
-             then do
-               unless thisIsThat $ sendSnapshots this that
-               return stores'
-             else do
-               this' <- createSnapshot this
-               unless thisIsThat $ sendSnapshots this' that
-               return $ L.map (\st ->
-                                if ((==) `on` (^.storeHostName)) st this
-                                then this'
-                                else st)
-                              stores'
-        else return stores'
-
-testme :: IO ()
-testme = runPushme $ PushmeOpts { jobs      = 1
-                                , sendOnly  = False
-                                , dryRun    = True
-                                , quick     = True
-                                , filesets  = ""
-                                , classes   = ""
-                                , verbose   = True
-                                , debug     = False
-                                , arguments = ["titan"] }
-
-getOption :: Data a => (a -> b) -> Sh b
-getOption option = do
-  opts <- liftIO $ getValue "main" "opts"
-  return $ fromJust $ option <$> opts
+currentLocalTime :: IO LocalTime
+currentLocalTime = do
+  tz <- getCurrentTimeZone
+  tm <- getCurrentTime
+  return $ utcToLocalTime tz tm
 
 getOption' :: Data a => (a -> b) -> IO b
 getOption' option = do
   opts <- getValue "main" "opts"
   return $ fromJust $ option <$> opts
 
+getOption :: Data a => (a -> b) -> Sh b
+getOption = liftIO . getOption'
+
 matchText :: Text -> Text -> Bool
-matchText x y = (toString y) =~ (toString x)
+matchText = flip ((=~) `on` toString)
 
-identifyStore :: Text -> Bool -> [Store] -> (Store, [Store])
-identifyStore hostname isLocal stores =
-  let (st', stores') =
-        L.foldr
-          (\st (x, xs) ->
-            if matchText (st^.storeHostRe) hostname
-            then let y = modStore isLocal $
-                         storeHostName .~ hostname $ st
-                 in (Just y, (y:xs))
-            else (x, (modStore False st:xs)))
-          (Nothing, []) stores
-  in case st' of
-    Nothing -> error $ toString $
-                format "Could not find hostname {} in ~/.pushme/stores"
-                       [hostname]
-    Just x  -> (x, stores')
+intToText :: Int -> Text
+intToText = fromString . show
 
-  where modStore local = storeIsLocal .~ local
+remote :: (FilePath -> [Text] -> Sh a) -> Text -> [Text] -> Sh a
+remote f host xs = f "ssh" (host:xs)
 
-remote :: Text -> [Text] -> Sh Text
-remote host xs = do
-  run "ssh" $ (host:xs)
+asRoot :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
+asRoot f p xs =
+  f "sudo" [ "su", "-", "root", "-c" , "\"" <> T.unwords xs' <> "\"" ]
+  where xs' = toTextIgnore p:xs
 
--- | Determine the latest known snapshot in a local or remote store by
---   inspecting the .zfs/snapshot directory at the top of the store.
-getLatestSnapshot :: Store -> Sh Int
-getLatestSnapshot store = silently $ do
-  let snapshots = fromFilePath $
-                  (store^.storePath) </> fromText ".zfs/snapshot"
-  listing <- T.lines <$> if store^.storeIsLocal
-                         then run "ls" ["-1", snapshots]
-                         else remote (store^.storeHostName)
-                                     ["ls", "-1", snapshots]
-
-  let numericEntries = L.filter (T.all isDigit) listing
-  if L.length numericEntries == 0
-    then return (-1)
-    else return $ read . toString . L.last $ numericEntries
+sudo :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
+sudo f p xs = f "sudo" (toTextIgnore p:xs)
 
 doRun :: (FilePath -> [Text] -> Sh a)
       -> (Text -> Sh ())
@@ -380,71 +531,6 @@ srun = doRun run infoL (return "") False True
 srun_ :: FilePath -> [Text] -> Sh ()
 srun_ = void .: doRun run_ infoL (return ()) False True
 
-createSnapshot :: Store -> Sh Store
-createSnapshot this
-  | this^.storeIsLocal = do
-    let nextRev      = succ (this^.storeLastRev)
-        thisSnapshot = (this^.storeZFSName) <> "@" <> intToText nextRev
-    noticeL $ format "Creating snapshot {}" [thisSnapshot]
-    vrun_ "sudo" ["zfs", "snapshot", "-r", thisSnapshot]
-    return $ storeLastRev .~ nextRev $ this
-
-  | otherwise =
-    error $ toString $
-      "Will not create snapshot on remote store: " <> show this
-
-sendSnapshots :: Store -> Store -> Sh ()
-sendSnapshots this that
-  | (this^.storeIsLocal) && (that^.storeIsLocal) =
-    doSendSnapshots this that (that^.storeZFSName) $
-      return ["sudo", "zfs", "recv", "-d", "-F", that^.storeZFSName]
-
-  | (this^.storeIsLocal) && not (that^.storeIsLocal) =
-    doSendSnapshots this that (format "{}@{}:{}"
-                    [ that^.storeUserName
-                    , that^.storeHostName
-                    , that^.storeZFSName ]) $ do
-      ssh <- which "ssh"
-      return [ toTextIgnore (fromJust ssh)
-             , that^.storeHostName, "zfs", "recv", "-d", "-F"
-             , that^.storeZFSName ]
-
-  | otherwise =
-    terror $ format "Cannot send from {} to {}" [show this, show that]
-
-doSendSnapshots :: Store -> Store -> Text -> Sh [Text] -> Sh ()
-doSendSnapshots this that dest recvCmd =
-  unless (this^.storeLastRev == that^.storeLastRev) $ escaping False $ do
-    verb <- getOption verbose
-    let thatSnapshot =
-          (this^.storeZFSName) <> "@" <> intToText (that^.storeLastRev)
-        thisSnapshot =
-          (this^.storeZFSName) <> "@" <> intToText (this^.storeLastRev)
-        sendCmd =
-           if that^.storeLastRev == -1
-          then do noticeL $ format "Sending {} → {}" [thisSnapshot, dest]
-                  return ["sudo", "zfs", "send", thisSnapshot]
-          else do noticeL $ format "Sending {} to {} → {}"
-                                   [thatSnapshot, thisSnapshot, dest]
-                  return $ ["sudo", "zfs", "send", "-R"]
-                        <> (if verb then ["-v"] else [])
-                        <> ["-I", thatSnapshot, thisSnapshot]
-
-    -- jww (2012-09-18): There is a currently a bug preventing this from
-    -- working.
-    -- sendCmd -|- recvCmd
-
-    sendArgs <- sendCmd
-    recvArgs <- recvCmd
-    vrun_ (fromText (L.head sendArgs)) $
-      L.tail sendArgs
-          <> ["|"]
-          <> (if verb then ["pv", "|"] else [])
-          <> recvArgs
-
-intToText :: Int -> Text
-intToText = fromString . show
-
 debugL :: Text -> Sh ()
 debugL = liftIO . debugM "pushme" . toString
 
@@ -458,97 +544,20 @@ warningL :: Text -> Sh ()
 warningL = liftIO . warningM "pushme" . toString
 
 errorL :: Text -> Sh ()
-errorL = error . toString
---errorL = liftIO . errorM "pushme" . toString
+errorL = liftIO . errorM "pushme" . toString
 
 criticalL :: Text -> Sh ()
 criticalL = liftIO . criticalM "pushme" . toString
-
-syncFilesets :: Store -> Store -> [Fileset] -> Sh ()
-syncFilesets this that fsets = do
-  liftIO $ parallel_ $
-    L.map (\fs -> do
-              fss <- fromString <$> getOption' filesets
-              when (T.null fss || (fs^.filesetName) `isInfixOf` fss) $ do
-                cls <- fromString <$> getOption' classes
-                when (T.null cls || (fs^.filesetClass) `isInfixOf` cls) $ do
-                  q <- getOption' quick
-                  when (not q || (fs^.filesetClass) == "quick") $
-                    systemVolCopy (fs^.filesetName) (fs^.filesetPath)
-                                  (genPath fs))
-          (L.sortBy (compare `on` (^.filesetPriority)) fsets)
 
-  where genPath fs =
-          if (this^.storeIsZFS) && (that^.storeIsZFS)
-          then (toTextIgnore (this^.storePath)) <> "/"
-               <> (toTextIgnore . fromJust) (fs^.filesetStorePath)
-          else if that^.storeIsLocal
-               then error $ "Unexpected: " ++ show that
-               else format "{}@{}:{}"
-                           [ that^.storeUserName
-                           , that^.storeHostName
-                           , toTextIgnore $ fs^.filesetPath ]
-
-systemVolCopy :: Text -> FilePath -> Text -> IO ()
-systemVolCopy label src dest = do
-  optsFile <- liftIO $ getHomePath (".pushme/filters/" <> label)
-  exists   <- isFile optsFile
-  let rsyncOptions = if exists
-                     then ["--include-from=" <> toTextIgnore optsFile]
-                     else []
-  shelly $ volcopy True rsyncOptions (toTextIgnore src) dest
-
-volcopy :: Bool -> [Text] -> Text -> Text -> Sh ()
-volcopy useSudo options src dest = errExit False $ escaping False $ do
-  noticeL $ format "volcopy {} → {}" [src, dest]
-
-  dry  <- getOption dryRun
-  verb <- getOption verbose
-
-  let toRemote = ":" `isInfixOf` dest
-      options' =
-        [ "-aHAXEy"
-        , "--fileflags"
-        , "--delete-after"
-        , "--ignore-errors"
-        , "--force-delete"
-
-        , "--exclude='/.Caches/'"
-        , "--exclude='/.Spotlight-V100/'"
-        , "--exclude='/.TemporaryItems/'"
-        , "--exclude='/.Trash/'"
-        , "--exclude='/.Trashes/'"
-        , "--exclude='/.fseventsd/'"
-        , "--exclude='/Temporary Items/'"
-        , "--exclude='/Network Trash Folder/'"
-
-        , "--filter='-p .DS_Store'"
-        , "--filter='-p .localized'"
-        , "--filter='-p .AppleDouble/'"
-        , "--filter='-p .AppleDB/'"
-        , "--filter='-p .AppleDesktop/'"
-        , "--filter='-p .com.apple.timemachine.supported'" ]
-
-        <> (if dry then ["-n"] else [])
-        <> (if verb then ["-P"] else ["-v"])
-        <> options
-        <> [src, dest]
-
-  rsync <- which "rsync"
-  doCopy (drun_ False) (fromJust rsync) toRemote useSudo options'
-
-  where
-    doCopy f rsync False True os  = f "sudo" (toTextIgnore rsync:os)
-    doCopy f rsync False False os = f rsync os
-    doCopy f rsync True True os   =
-      f "sudo" [ "su", "-", "root", "-c"
-               , "\"" <>
-                 T.unwords (toTextIgnore rsync:remoteRsync rsync:os)
-                 <> "\"" ]
-    doCopy f rsync True False os  =
-      f rsync (remoteRsync rsync:os)
-
-    remoteRsync :: FilePath -> Text
-    remoteRsync x = format "--rsync-path='sudo {}'" [toTextIgnore x]
+humanReadable :: Integer -> String
+humanReadable x
+  | x < 1024   = printf "%db" x
+  | x < 1024^2 = printf "%.0fK" (fromIntegral x / (1024 :: Double))
+  | x < 1024^3 = printf "%.1fM" (fromIntegral x / (1024^2 :: Double))
+  | x < 1024^4 = printf "%.2fG" (fromIntegral x / (1024^3 :: Double))
+  | x < 1024^5 = printf "%.3fT" (fromIntegral x / (1024^4 :: Double))
+  | x < 1024^6 = printf "%.3fP" (fromIntegral x / (1024^5 :: Double))
+  | x < 1024^7 = printf "%.3fX" (fromIntegral x / (1024^6 :: Double))
+  | otherwise  = printf "%db" x
 
 -- Main.hs (pushme) ends here
