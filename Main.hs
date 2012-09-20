@@ -103,6 +103,7 @@ data Fileset = Fileset { _filesetName      :: Text
                        , _filesetPriority  :: Int
                        , _filesetClass     :: Text
                        , _filesetPath      :: FilePath
+                       , _filesetZFSOnly   :: Bool
                        , _filesetStorePath :: Maybe FilePath }
                deriving Show
 
@@ -350,8 +351,10 @@ syncFilesets :: Store -> [Fileset] -> Sh Store
 syncFilesets that fsets = do
   liftIO $ parallel_ $
     L.map (\fs ->
-            unless ((that^.storeType) == "rsync-zfs"
-                    && isNothing (fs^.filesetStorePath)) $ do
+            unless (((that^.storeType) == "rsync-zfs"
+                     && isNothing (fs^.filesetStorePath))
+                    || ((that^.storeType) == "rsync"
+                        && (fs^.filesetZFSOnly))) $ do
               fss <- fromString <$> getOption' filesets
               when (T.null fss || (fs^.filesetName) `isInfixOf` fss) $ do
                 cls <- fromString <$> getOption' classes
@@ -391,7 +394,7 @@ systemVolCopy label src dest = do
 
 volcopy :: Bool -> [Text] -> Text -> Text -> Sh ()
 volcopy useSudo options src dest = errExit False $ escaping False $ do
-  noticeL $ format "volcopy {} → {}" [src, dest]
+  noticeL $ format "{} → {}" [src, dest]
 
   dry  <- getOption dryRun
   verb <- getOption verbose
@@ -439,10 +442,12 @@ volcopy useSudo options src dest = errExit False $ escaping False $ do
       then silently $ do
         output <- doCopy (drun False) r toRemote useSudo options'
         let xfer = (read :: String -> Integer)
-                   . toString . (^. element 4) . T.words . L.head
+                   . toString . (!! 4) . T.words . L.head
                    . L.filter ("Total transferred file size:" `isPrefixOf`)
                    . T.lines $ output
-        noticeL $ format "Transferred {}" [humanReadable xfer]
+        noticeL $ if xfer == 0
+                  then "No data transferred"
+                  else format "Transferred {}" [humanReadable xfer]
 
       else doCopy (drun_ False) r toRemote useSudo options'
 
