@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -9,6 +10,7 @@ module Main where
 
 import           Control.Applicative
 import           Control.Concurrent.ParallelIO
+import           Control.DeepSeq
 import           Control.Exception
 import           Control.Lens hiding (value)
 import           Control.Monad
@@ -19,6 +21,7 @@ import           Data.Foldable
 import           Data.Function
 import           Data.Function.Pointless
 import qualified Data.List as L
+import qualified Data.Map as M
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Stringable as S hiding (fromText)
@@ -28,6 +31,7 @@ import           Data.Time.Clock
 import           Data.Time.Format
 import           Data.Time.LocalTime
 import           Data.Yaml hiding ((.:))
+import           Debug.Trace as D
 import           Filesystem
 import           Filesystem.Path.CurrentOS hiding (fromText, (</>))
 import           GHC.Conc
@@ -149,6 +153,9 @@ instance ToJSON LocalTime where
 
 $(deriveJSON (L.drop 6) ''Store)
 
+instance NFData Store where
+  rnf a = a `seq` ()
+
 data PushmeException = PushmeException deriving (Show, Typeable)
 
 instance Exception PushmeException
@@ -162,7 +169,8 @@ main = do
   _        <- GHC.Conc.setNumCapabilities $
               case jobs opts of 0 -> min procs 1; x -> x
 
-  catchany (runPushme opts) (const $ return ())
+  (runPushme opts) `catch` \(_ :: PushmeException) -> return ()
+                   `catch` \(ex :: SomeException)  -> error (show ex)
 
 testme :: IO ()
 testme = runPushme
@@ -212,13 +220,13 @@ runPushme opts = do
                                (st^.storeLastSync))
 
       else do
-        sts'' <- shelly $ silently $ do
+        (_, sts'') <- shelly $ silently $ do
           here <- cmd "hostname"
           let (this, sts') = identifyStore here True True sts
 
           debugL $ here <> " -> " <> fromString (show this)
 
-          L.foldl' (processHost this fsets) (return sts')
+          L.foldl' (processHost fsets) (return (this, sts'))
                    (arguments opts)
 
         unless (dryRun opts) $
@@ -226,39 +234,37 @@ runPushme opts = do
 
   stopGlobalPool
 
-processHost :: Store -> [Fileset] -> Sh [Store] -> String -> Sh [Store]
-processHost this fsets storesInSh host = do
-  sts <- storesInSh
+processHost :: [Fileset] -> Sh (Store, [Store]) -> String -> Sh (Store, [Store])
+processHost fsets storesInSh host = do
+  (this, sts) <- storesInSh
   let there = fromString host
       (that, sts') =
         identifyStore there False
                       (matchText (this^.storeHostRe) there) sts
 
-  infoL $ "Synchronizing " <> there
+  noticeL $ "Synchronizing " <> there
+  debugL $ (this^.storeHostRe) <> " -> " <> fromString (show this)
   debugL $ there <> " -> " <> fromString (show that)
 
   snapshotOnly <- getOption snapshot
 
-  (this', that') <-
+  that' <-
     case that^.storeType of
-      "rsync"     -> (this,) <$> syncFilesets that fsets
-      "rsync-zfs" -> (this,) <$> ((if snapshotOnly
-                                   then return that
-                                   else syncFilesets that fsets)
-                                  >>= createSnapshot)
+      "rsync"     -> syncFilesets that fsets
+      "rsync-zfs" -> if snapshotOnly
+                     then createSnapshot that
+                     else syncFilesets that fsets >>= createSnapshot
       "zfs"       -> sendSnapshots this that
 
-      _ -> error $ "Unexpected: processHost: " ++ show that
+      _ -> error $ "Unexpected store type: " ++ show that
 
-  -- Don't update both this and that if they refer to the same stores
-  -- entry.
-  let sts'' = if ((==) `on` (^.storeHostRe)) this' that'
-                 then sts'
-                 else replaceStore this this' sts'
+  debugL $ there <> " is now -> " <> fromString (show that')
 
-  return $ replaceStore that that' sts''
+  return ( if matchStores this that' then that' else this
+         , replaceStore that that' sts' )
 
-  where replaceStore      = replaceElem ((==) `on` (^.storeHostRe))
+  where matchStores       = (==) `on` (^.storeHostRe)
+        replaceStore      = replaceElem matchStores
         replaceElem f x y = L.map (\z -> if f x z then y else z)
 
 identifyStore :: Text -> Bool -> Bool -> [Store] -> (Store, [Store])
@@ -295,7 +301,7 @@ createSnapshot this
     error $ toString $
       "Will not create snapshot on remote store: " <> show this
 
-sendSnapshots :: Store -> Store -> Sh (Store, Store)
+sendSnapshots :: Store -> Store -> Sh Store
 sendSnapshots this that
   | (this^.storeIsLocal) && (that^.storeIsLocal) =
     doSendSnapshots this that (that^.storeZFSName) $
@@ -315,9 +321,9 @@ sendSnapshots this that
     error $ toString $
     format "Cannot send from {} to {}" [show this, show that]
 
-doSendSnapshots :: Store -> Store -> Text -> Sh [Text] -> Sh (Store, Store)
+doSendSnapshots :: Store -> Store -> Text -> Sh [Text] -> Sh Store
 doSendSnapshots this that dest recvCmd
-  | this^.storeLastRev == that^.storeLastRev = return (this, that)
+  | this^.storeLastRev == that^.storeLastRev = return that
 
   | otherwise = escaping False $ do
     verb <- getOption verbose
@@ -343,9 +349,8 @@ doSendSnapshots this that dest recvCmd
                       <> recvArgs
 
     now <- liftIO currentLocalTime
-    return ( this
-           , storeLastSync .~ now $
-             storeLastRev  .~ (this^.storeLastRev) $ that )
+    return $ storeLastSync .~ now
+           $ storeLastRev  .~ (this^.storeLastRev) $ that
 
 syncFilesets :: Store -> [Fileset] -> Sh Store
 syncFilesets that fsets = do
@@ -372,12 +377,11 @@ genPath :: Store -> Fileset -> Text
 genPath that fs =
   case that^.storeType of
     "rsync-zfs" ->
-      toTextIgnore (that^.storePath) <> "/"
-      <> (toTextIgnore . fromJust) (fs^.filesetStorePath)
+      toTextIgnore ((that^.storePath) </> fromJust (fs^.filesetStorePath))
 
     "rsync" ->
       if that^.storeIsLocal
-      then error $ "Unexpected: genPath: " ++ show that
+      then toTextIgnore ((that^.storePath) </> fromJust (fs^.filesetStorePath))
       else format "{}@{}:{}"
                   [ that^.storeUserName
                   , that^.storeHostName
@@ -397,10 +401,11 @@ volcopy useSudo options src dest = errExit False $ escaping False $ do
   noticeL $ format "{} → {}" [src, dest]
 
   dry  <- getOption dryRun
+  deb  <- getOption debug
   verb <- getOption verbose
-  shhh <- getOption quiet
 
-  let toRemote = ":" `isInfixOf` dest
+  let shhh     = not deb && not verb
+      toRemote = ":" `isInfixOf` dest
       options' =
         [ "-aHAXEy"
         , "--fileflags"
@@ -441,17 +446,33 @@ volcopy useSudo options src dest = errExit False $ escaping False $ do
       if shhh
       then silently $ do
         output <- doCopy (drun False) r toRemote useSudo options'
-        let xfer = (read :: String -> Integer)
-                   . toString . (!! 4) . T.words . L.head
-                   . L.filter ("Total transferred file size:" `isPrefixOf`)
-                   . T.lines $ output
-        noticeL $ if xfer == 0
-                  then "No data transferred"
-                  else format "Transferred {}" [humanReadable xfer]
-
-      else doCopy (drun_ False) r toRemote useSudo options'
+        let stats = M.fromList $
+                    L.map (liftM2 (,) L.head (L.head . T.words . L.last)
+                           . T.splitOn ": ")
+                    . L.filter (": " `isInfixOf`)
+                    . T.lines $ output
+            files = field "Number of files" stats
+            sent  = field "Number of files transferred" stats
+            total = field "Total file size" stats
+            xfer  = field "Total transferred file size" stats
+        noticeL $ format "Sent {} in {} files (out of {} in {})"
+                         [ fromString (humanReadable xfer),
+                           commaSep (fromIntegral sent)
+                         , fromString (humanReadable total),
+                           commaSep (fromIntegral files) ]
+      else
+        doCopy (drun_ False) r toRemote useSudo options'
 
   where
+    commaSep :: Int -> Text
+    commaSep = fst . T.foldr (\x (xs, num) ->
+                               if num /= 0 && num `mod` 3 == 0
+                               then (x `cons` ',' `cons` xs, num + 1)
+                               else (x `cons` xs, num + 1))
+                             ("", 0)
+                   . intToText
+    field x stats = read (toString (stats M.! x)) :: Integer
+
     doCopy f rsync False False os = f rsync os
     doCopy f rsync False True os  = sudo f rsync os
     doCopy f rsync True False os  = f rsync (remoteRsync rsync:os)
