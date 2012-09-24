@@ -431,7 +431,7 @@ systemVolCopy label src dest = do
   volcopy True rsyncOptions (toTextIgnore src) dest
 
 volcopy :: Bool -> [Text] -> Text -> Text -> Sh ()
-volcopy useSudo options src dest = errExit False $ verbosely $ do
+volcopy useSudo options src dest = errExit False $ do
   noticeL $ format "{} → {}" [src, dest]
 
   dry  <- getOption dryRun
