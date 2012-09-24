@@ -17,7 +17,7 @@ import           Control.Monad
 import           Data.Aeson hiding ((.:))
 import           Data.Aeson.TH
 import qualified Data.ByteString.Char8 as BC
-import           Data.Foldable
+import           Data.Foldable hiding (elem, notElem)
 import           Data.Function
 import           Data.Function.Pointless
 import qualified Data.List as L
@@ -39,6 +39,7 @@ import           Prelude hiding (FilePath, catch)
 import           Shelly
 import           System.Console.CmdArgs
 import           System.Environment (getArgs, withArgs)
+import qualified System.FilePath.Glob as Glob
 import           System.IO (stderr)
 import           System.IO.Storage
 import           System.Locale
@@ -62,7 +63,6 @@ pushmeSummary = "pushme v" ++ version ++ ", (C) John Wiegley " ++ copyright
 
 data PushmeOpts = PushmeOpts { jobs      :: Int
                              , dryRun    :: Bool
-                             , quick     :: Bool
                              , snapshot  :: Bool
                              , stores    :: Bool
                              , filesets  :: String
@@ -79,8 +79,6 @@ pushmeOpts = PushmeOpts
                       &= help "Run INT concurrent finds at once (default: 2)"
     , dryRun    = def &= name "n"
                       &= help "Don't take any actions"
-    , quick     = def &= name "Q"
-                      &= help "Avoid expensive operations"
     , snapshot  = def &= name "s"
                       &= help "Don't sync to an rsync-zfs store, just snapshot"
     , stores    = def &= help "Show all the stores know to pushme"
@@ -103,12 +101,13 @@ pushmeOpts = PushmeOpts
 -- | A 'Fileset' is a data source.  It can be synced to a 'filesetStorePath'
 --   within a ZFS 'Store', or synced to the same path in a non-ZFS 'Store'.
 
-data Fileset = Fileset { _filesetName      :: Text
-                       , _filesetPriority  :: Int
-                       , _filesetClass     :: Text
-                       , _filesetPath      :: FilePath
-                       , _filesetZFSOnly   :: Bool
-                       , _filesetStorePath :: Maybe FilePath }
+data Fileset = Fileset { _filesetName          :: Text
+                       , _filesetPriority      :: Int
+                       , _filesetClass         :: Text
+                       , _filesetPath          :: FilePath
+                       , _filesetReportMissing :: Bool
+                       , _filesetZFSOnly       :: Bool
+                       , _filesetStorePath     :: Maybe FilePath }
                deriving Show
 
 makeLenses ''Fileset
@@ -176,7 +175,6 @@ testme :: IO ()
 testme = runPushme
          PushmeOpts { jobs      = 1
                     , dryRun    = True
-                    , quick     = True
                     , snapshot  = False
                     , stores    = False
                     , filesets  = ""
@@ -359,15 +357,17 @@ syncFilesets that fsets = do
             unless (((that^.storeType) == "rsync-zfs"
                      && isNothing (fs^.filesetStorePath))
                     || ((that^.storeType) == "rsync"
-                        && (fs^.filesetZFSOnly))) $ do
-              fss <- fromString <$> getOption' filesets
-              when (T.null fss || (fs^.filesetName) `isInfixOf` fss) $ do
-                cls <- fromString <$> getOption' classes
-                when (T.null cls || (fs^.filesetClass) `isInfixOf` cls) $ do
-                  q <- getOption' quick
-                  when (not q || (fs^.filesetClass) == "quick") $
-                    systemVolCopy (fs^.filesetName) (fs^.filesetPath)
-                                  (genPath that fs))
+                        && (fs^.filesetZFSOnly))) $ shelly $ do
+              fss <- fromString <$> getOption filesets
+              when (T.null fss
+                    || matchText fss (fs^.filesetName)) $ do
+                cls <- fromString <$> getOption classes
+                when (T.null cls
+                      || matchText cls (fs^.filesetClass)) $ do
+                  when (fs^.filesetReportMissing) $
+                    reportMissingFiles fs
+                  systemVolCopy (fs^.filesetName) (fs^.filesetPath)
+                                (genPath that fs))
           (L.sortBy (compare `on` (^.filesetPriority)) fsets)
 
   now <- liftIO currentLocalTime
@@ -382,22 +382,56 @@ genPath that fs =
     "rsync" ->
       if that^.storeIsLocal
       then toTextIgnore ((that^.storePath) </> fromJust (fs^.filesetStorePath))
-      else format "{}@{}:{}"
-                  [ that^.storeUserName
-                  , that^.storeHostName
-                  , toTextIgnore $ fs^.filesetPath ]
+      else format "{}@{}:{}" [ that^.storeUserName
+                             , that^.storeHostName
+                             , escape (toTextIgnore (fs^.filesetPath)) ]
 
     _ -> error $ "Unexpected: genPath: " ++ show that
 
-systemVolCopy :: Text -> FilePath -> Text -> IO ()
+  where escape x = if "\"" `isInfixOf` x || " " `isInfixOf` x
+                   then "'" <> T.replace "\"" "\\\"" x <> "'"
+                   else x
+
+reportMissingFiles :: Fileset -> Sh ()
+reportMissingFiles fs = do
+  files    <- L.map (T.drop (T.length (toTextIgnore (fs^.filesetPath)))
+                     . toTextIgnore)
+              <$> ls (fs^.filesetPath)
+  optsFile <- liftIO $ getHomePath (".pushme/filters/" <> fs^.filesetName)
+  exists   <- liftIO $ isFile optsFile
+  when exists $ do
+    optsText <- readfile optsFile
+    let stringify    = (\x -> if x !! 0 == '/' then L.tail x else x)
+                       . (\x -> if x !! (L.length x - 1) == '/'
+                                then L.init x else x)
+                       . T.unpack . T.drop 2
+        patterns     = L.map Glob.compile
+                       . L.filter (\x -> x /= "*" && x /= "*/"
+                                      && x /= ".*" && x /= ".*/")
+                       . L.map stringify . T.lines $ optsText
+        patMatch f p = Glob.match p f
+        files'       =
+          L.foldl' (\acc x ->
+                     if L.any (patMatch x) patterns
+                     then acc
+                     else (x:acc)) []
+                   (L.map toString
+                    . L.filter (`notElem` [ ".DS_Store", ".localized" ])
+                    $ files)
+    traverse_ (\x -> warningL $
+                     format "{} not mentioned in {}"
+                            [ fromString x, toTextIgnore optsFile ])
+              files'
+
+systemVolCopy :: Text -> FilePath -> Text -> Sh ()
 systemVolCopy label src dest = do
   optsFile <- liftIO $ getHomePath (".pushme/filters/" <> label)
-  exists   <- isFile optsFile
+  exists   <- liftIO $ isFile optsFile
   let rsyncOptions = ["--include-from=" <> toTextIgnore optsFile | exists]
-  shelly $ volcopy True rsyncOptions (toTextIgnore src) dest
+  volcopy True rsyncOptions (toTextIgnore src) dest
 
 volcopy :: Bool -> [Text] -> Text -> Text -> Sh ()
-volcopy useSudo options src dest = errExit False $ escaping False $ do
+volcopy useSudo options src dest = errExit False $ verbosely $ do
   noticeL $ format "{} → {}" [src, dest]
 
   dry  <- getOption dryRun
@@ -420,22 +454,24 @@ volcopy useSudo options src dest = errExit False $ escaping False $ do
         , "--exclude=/.Trashes/"
         , "--exclude=/.fseventsd/"
         , "--exclude=/.zfs/"
-        , "--exclude='/Temporary Items/'"
-        , "--exclude='/Network Trash Folder/'"
+        , "--exclude=/Temporary Items/"
+        , "--exclude=/Network Trash Folder/"
 
-        , "--filter='-p .DS_Store'"
-        , "--filter='-p .localized'"
-        , "--filter='-p .AppleDouble/'"
-        , "--filter='-p .AppleDB/'"
-        , "--filter='-p .AppleDesktop/'"
-        , "--filter='-p .com.apple.timemachine.supported'" ]
+        , "--filter=-p .DS_Store"
+        , "--filter=-p .localized"
+        , "--filter=-p .AppleDouble/"
+        , "--filter=-p .AppleDB/"
+        , "--filter=-p .AppleDesktop/"
+        , "--filter=-p .com.apple.timemachine.supported" ]
 
         <> ["-n" | dry]
         <> (if shhh
             then ["--stats"]
             else if verb
                  then ["-P"]
-                 else ["-v"])
+                 else if deb
+                      then ["-v", "-v"]
+                      else ["-v"])
         <> options
         <> [src, dest]
 
@@ -478,7 +514,7 @@ volcopy useSudo options src dest = errExit False $ escaping False $ do
     doCopy f rsync True False os  = f rsync (remoteRsync rsync:os)
     doCopy f rsync True True os   = asRoot f rsync (remoteRsync rsync:os)
 
-    remoteRsync x = format "--rsync-path='sudo {}'" [toTextIgnore x]
+    remoteRsync x = format "--rsync-path=sudo {}" [toTextIgnore x]
 
 getHomePath :: Text -> IO FilePath
 getHomePath p = (</> fromText p) <$> getHomeDirectory
@@ -520,7 +556,8 @@ remote f host xs = f "ssh" (host:xs)
 
 asRoot :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
 asRoot f p xs =
-  f "sudo" [ "su", "-", "root", "-c" , "\"" <> T.unwords xs' <> "\"" ]
+  f "sudo" [ "su", "-", "root", "-c"
+           , T.unwords (L.map (\x -> "\"" <> x <> "\"") xs') ]
   where xs' = toTextIgnore p:xs
 
 sudo :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
