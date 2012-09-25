@@ -51,6 +51,19 @@ import           Text.Printf
 import           Text.Regex.Posix
 
 default (Integer, Text)
+
+instance FromJSON LocalTime where
+  parseJSON =
+    parseJSON >=> return . readTime defaultTimeLocale "%Y%m%dT%H%M%S"
+
+instance ToJSON LocalTime where
+  toJSON = toJSON . formatTime defaultTimeLocale "%Y%m%dT%H%M%S"
+
+instance FromJSON FilePath where
+  parseJSON = parseJSON >=> return . fromText
+
+instance ToJSON FilePath where
+  toJSON = toJSON . toTextIgnore
 
 version :: String
 version = "0.1.0"
@@ -95,19 +108,6 @@ pushmeOpts = PushmeOpts
     &= program "pushme"
     &= help "Synchronize data from one machine to another"
 
-instance FromJSON LocalTime where
-  parseJSON =
-    parseJSON >=> return . readTime defaultTimeLocale "%Y%m%dT%H%M%S"
-
-instance ToJSON LocalTime where
-  toJSON = toJSON . formatTime defaultTimeLocale "%Y%m%dT%H%M%S"
-
-instance FromJSON FilePath where
-  parseJSON = parseJSON >=> return . fromText
-
-instance ToJSON FilePath where
-  toJSON = toJSON . toTextIgnore
-
 -- | A 'Fileset' is a logical grouping of files, with an assigned class and
 --   priority.  It may also have an associated filter.
 
@@ -139,30 +139,6 @@ makeLenses ''Container
 
 $(deriveJSON (L.drop 10) ''Container)
 
-mergeContainers :: Container -> Container -> Container
-x `mergeContainers` y
-  |   (x^.containerFileset)  == (y^.containerFileset)
-    && (x^.containerStore)    == (y^.containerStore)
-    && (x^.containerPath)     == (y^.containerPath)
-    && (x^.containerPoolPath) == (y^.containerPoolPath) =
-    containerLastRev .~
-      (if isNothing (y^.containerLastRev)
-       then x^.containerLastRev
-       else if   isNothing (x^.containerLastRev)
-               || fromJust (x^.containerLastRev) <
-                 fromJust (y^.containerLastRev)
-            then y^.containerLastRev
-            else x^.containerLastRev) $
-    containerLastSync .~
-      (if isNothing (y^.containerLastSync)
-       then x^.containerLastSync
-       else if   isNothing (x^.containerLastSync)
-               || fromJust (x^.containerLastSync) <
-                 fromJust (y^.containerLastSync)
-            then y^.containerLastSync
-            else x^.containerLastSync) $ x
-  | otherwise = x
-
 -- | A 'Store' is a repository that holds 'Container' instances in some form
 --   or another.  Synchronization of a remote ZFS container from a local ZFS
 --   container is done by copying over incremental snapshots.  Note that
@@ -187,18 +163,18 @@ $(deriveJSON (L.drop 6) ''Store)
 
 instance NFData Store where
   rnf a = a `seq` ()
-
+
 data Info = Info { _infoHostName  :: Text
                  , _infoStore     :: Store
                  , _infoContainer :: Container }
-            deriving Show
+          deriving Show
 
 makeLenses ''Info
 
 data Binding = Binding { _bindingThis    :: Info
                        , _bindingThat    :: Info
                        , _bindingFileset :: Fileset }
-            deriving Show
+             deriving Show
 
 makeLenses ''Binding
 
@@ -411,8 +387,7 @@ reportMissingFiles label cont = do
 createBinding :: (Text, Store) -> (Text, Store) -> [Fileset] -> [Container]
               -> Text -> Binding
 createBinding (here,this) (there,that) fsets conts n =
-  let fileset = L.find (\x -> x^.filesetName == n) fsets
-  in case fileset of
+  case L.find (\x -> x^.filesetName == n) fsets of
     Nothing ->
       error $ toString  $ "Could not find fileset: " <> n
     Just fs ->
@@ -433,8 +408,46 @@ findContainer fileset store conts =
     (error $ toString $
      format "Could not find container for Store {} + Fileset {}"
      [ store^.storeName, fileset^.filesetName ]) $
-    L.find (\x -> (x^.containerFileset) == (fileset^.filesetName) &&
-                 (x^.containerStore)   == (store^.storeName)) conts
+    L.find (\x -> (x^.containerFileset) == (fileset^.filesetName)
+               && (x^.containerStore)   == (store^.storeName)) conts
+
+mergeContainers :: Container -> Container -> Container
+x `mergeContainers` y
+  |   (x^.containerFileset)  == (y^.containerFileset)
+    && (x^.containerStore)    == (y^.containerStore)
+    && (x^.containerPath)     == (y^.containerPath)
+    && (x^.containerPoolPath) == (y^.containerPoolPath) =
+    containerLastRev .~
+      (if isNothing (y^.containerLastRev)
+       then x^.containerLastRev
+       else if   isNothing (x^.containerLastRev)
+               || fromJust (x^.containerLastRev) <
+                 fromJust (y^.containerLastRev)
+            then y^.containerLastRev
+            else x^.containerLastRev) $
+    containerLastSync .~
+      (if isNothing (y^.containerLastSync)
+       then x^.containerLastSync
+       else if   isNothing (x^.containerLastSync)
+               || fromJust (x^.containerLastSync) <
+                 fromJust (y^.containerLastSync)
+            then y^.containerLastSync
+            else x^.containerLastSync) $ x
+  | otherwise = x
+
+updateContainers :: Maybe Int -> Binding -> Sh [Container]
+updateContainers Nothing bnd = do
+  now <- liftIO currentLocalTime
+  let update = containerLastSync .~ Just now
+  return [ update (bnd^.bindingThis.infoContainer)
+         , update (bnd^.bindingThat.infoContainer) ]
+
+updateContainers rev bnd = do
+  now <- liftIO currentLocalTime
+  let update = containerLastSync .~ Just now
+  return [ update (bnd^.bindingThis.infoContainer)
+         , containerLastRev .~ rev $
+           update (bnd^.bindingThat.infoContainer) ]
 
 findStore :: Text -> [Store] -> Store
 findStore n sts =
@@ -444,6 +457,10 @@ findStore n sts =
 
 storeIsLocal :: Text -> Store -> Bool
 storeIsLocal host st = matchText (st^.storeSelfRe) host
+
+bothSidesZFS :: Binding -> Bool
+bothSidesZFS bnd = isJust (bnd^.bindingThis.infoStore.storeZfsPool)
+                 && isJust (bnd^.bindingThat.infoStore.storeZfsPool)
 
 data ContainerPath = NoPath
                    | Pathname FilePath
@@ -456,16 +473,18 @@ data FullPath = LocalPath ContainerPath
               | RemotePath Text Text ContainerPath
               deriving Show
 
-getPathname :: FilePath -> IO ContainerPath
-getPathname fp = do
-  let text = toTextIgnore fp
-  if T.head text == '~'
-    then Pathname <$> getHomePath (T.drop 2 text)
-    else return $ Pathname $ fromText text
+convertPath :: FilePath -> String
+convertPath = toString
 
-bothSidesZFS :: Binding -> Bool
-bothSidesZFS bnd = isJust (bnd^.bindingThis.infoStore.storeZfsPool)
-                 && isJust (bnd^.bindingThat.infoStore.storeZfsPool)
+getHomePath :: Text -> IO FilePath
+getHomePath p = (</> fromText p) <$> getHomeDirectory
+
+getPathname :: FilePath -> IO ContainerPath
+getPathname fp =
+  let text = toTextIgnore fp
+  in if T.head text == '~'
+     then Pathname <$> getHomePath (T.drop 2 text)
+     else return $ Pathname $ fromText text
 
 thatZfsPath :: Binding -> IO ContainerPath
 thatZfsPath bnd
@@ -568,25 +587,6 @@ createSyncCommands bnd = do
              , return []
              , updateContainers Nothing bnd )
 
-    (LocalPath (ZfsFilesystem l),
-     LocalPath (ZfsFilesystem r)) ->
-      let lastRev = thisCont^.containerLastRev
-      in return ( localSend l recurseThis
-                , localReceive r recurseThat
-                , updateContainers lastRev bnd )
-
-    (LocalPath (ZfsSnapshot l e),
-     LocalPath (ZfsFilesystem r)) ->
-      return ( localSendRev l recurseThis e
-             , localReceive r recurseThat
-             , updateContainers (Just e) bnd )
-
-    (LocalPath (ZfsSnapshotRange l b e),
-     LocalPath (ZfsFilesystem r)) ->
-      return ( localSendTwoRevs l recurseThis b e
-             , localReceive r recurseThat
-             , updateContainers (Just e) bnd )
-
     (LocalPath (Pathname l), RemotePath u h (Pathname r)) ->
       return ( systemVolCopy (bnd^.bindingFileset.filesetName) l $
                              format "{}@{}:{}"
@@ -595,16 +595,33 @@ createSyncCommands bnd = do
              , updateContainers Nothing bnd )
 
     (LocalPath (ZfsFilesystem l),
+     LocalPath (ZfsFilesystem r)) ->
+      return ( localSend l recurseThis
+             , localReceive r recurseThat
+             , updateContainers (thisCont^.containerLastRev) bnd )
+
+    (LocalPath (ZfsFilesystem l),
      RemotePath u h (ZfsFilesystem r)) ->
-      let lastRev = thisCont^.containerLastRev
-      in return ( localSend l recurseThis
-                , remoteReceive u h r recurseThat
-                , updateContainers lastRev bnd )
+      return ( localSend l recurseThis
+             , remoteReceive u h r recurseThat
+             , updateContainers (thisCont^.containerLastRev) bnd )
+
+    (LocalPath (ZfsSnapshot l e),
+     LocalPath (ZfsFilesystem r)) ->
+      return ( localSendRev l recurseThis e
+             , localReceive r recurseThat
+             , updateContainers (Just e) bnd )
 
     (LocalPath (ZfsSnapshot l e),
      RemotePath u h (ZfsFilesystem r)) ->
       return ( localSendRev l recurseThis e
              , remoteReceive u h r recurseThat
+             , updateContainers (Just e) bnd )
+
+    (LocalPath (ZfsSnapshotRange l b e),
+     LocalPath (ZfsFilesystem r)) ->
+      return ( localSendTwoRevs l recurseThis b e
+             , localReceive r recurseThat
              , updateContainers (Just e) bnd )
 
     (LocalPath (ZfsSnapshotRange l b e),
@@ -622,8 +639,6 @@ createSyncCommands bnd = do
                then "'" <> T.replace "\"" "\\\"" x <> "'"
                else x
 
-      -- jww (2012-09-24): Distinguish between recursive (-R) and
-      -- non-recursive sends.
     localSend pool recurse =
       return $ ["sudo", "zfs", "send"]
                <> ["-R" | recurse]
@@ -646,8 +661,6 @@ createSyncCommands bnd = do
                   , pool <> "@" <> intToText r2 ]
 
     localReceive pool recurse =
-      -- jww (2012-09-24): Distinguish between recursive (-d) and
-      -- non-recursive receives.
       return $ ["sudo", "zfs", "recv"]
                <> ["-d" | recurse]
                <> ["-F", pool]
@@ -658,20 +671,6 @@ createSyncCommands bnd = do
                , "zfs", "recv"]
                <> ["-d" | recurse]
                <> ["-F", pool ]
-
-updateContainers :: Maybe Int -> Binding -> Sh [Container]
-updateContainers Nothing bnd = do
-  now <- liftIO currentLocalTime
-  let update = containerLastSync .~ Just now
-  return [ update (bnd^.bindingThis.infoContainer)
-         , update (bnd^.bindingThat.infoContainer) ]
-
-updateContainers rev bnd = do
-  now <- liftIO currentLocalTime
-  let update = containerLastSync .~ Just now
-  return [ update (bnd^.bindingThis.infoContainer)
-         , containerLastRev .~ rev $
-           update (bnd^.bindingThat.infoContainer) ]
 
 systemVolCopy :: Text -> FilePath -> Text -> Sh [Text]
 systemVolCopy label src dest = do
@@ -768,12 +767,6 @@ volcopy useSudo options src dest = errExit False $ do
 
     remoteRsync x = format "--rsync-path=sudo {}" [toTextIgnore x]
 
-getHomePath :: Text -> IO FilePath
-getHomePath p = (</> fromText p) <$> getHomeDirectory
-
-convertPath :: FilePath -> String
-convertPath = toString
-
 readDataFile :: FromJSON a => Text -> IO [a]
 readDataFile p = do
   p' <- getHomePath p
