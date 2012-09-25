@@ -1,0 +1,126 @@
+- 'Priority': |-
+    95
+  'Name': 'Applications'
+  'Class': 'system,main'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    96
+  'Name': 'MyApplications'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    160
+  'Name': 'Archives'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    70
+  'Name': 'Contracts'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    110
+  'Name': 'Databases'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    200
+  'Name': 'DataFS'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    10
+  'Name': 'Documents'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    100
+  'Name': 'Downloads'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    30
+  'Name': 'Library'
+  'Class': 'system'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    300
+  'Name': 'MirrorFS'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    40
+  'Name': 'MyLibrary'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    true
+- 'Priority': |-
+    41
+  'Name': 'MyAppSupport'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    true
+- 'Priority': |-
+    50
+  'Name': 'Messages'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    120
+  'Name': 'Mirrors'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    150
+  'Name': 'Movies'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    140
+  'Name': 'Music'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    141
+  'Name': 'Media'
+  'Class': large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    130
+  'Name': 'Pictures'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    20
+  'Name': 'Projects'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    60
+  'Name': 'home'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    true
+- 'Priority': |-
+    80
+  'Name': 'local'
+  'Class': 'system,main'
+  'ReportMissing': |-
+    false

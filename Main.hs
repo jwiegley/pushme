@@ -581,9 +581,9 @@ syncContainers :: Binding -> Sh [Container]
 syncContainers bnd = do
   verb  <- getOption verbose
 
-  noticeL $ format "Sending {} from {} → {}"
-                   [ bnd^.bindingFileset.filesetName
-                   , bnd^.bindingThis.infoStore.storeName
+  noticeL $ format "Sending {}/{} → {}"
+                   [ bnd^.bindingThis.infoStore.storeName
+                   , bnd^.bindingFileset.filesetName
                    , bnd^.bindingThat.infoStore.storeName ]
 
   (sendCmd, recvCmd, updater) <- createSyncCommands bnd
@@ -593,7 +593,8 @@ syncContainers bnd = do
     recvArgs <- recvCmd
     if L.null recvArgs
       then vrun_ (fromText (L.head sendArgs)) (L.tail sendArgs)
-      else vrun_ (fromText (L.head sendArgs)) $
+      else escaping False $
+           vrun_ (fromText (L.head sendArgs)) $
              L.tail sendArgs <> ["|"] <> (if verb
                                           then ["pv", "|"]
                                           else [])

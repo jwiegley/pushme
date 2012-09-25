@@ -1,0 +1,547 @@
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Applications'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': '20120925T143856'
+  'Path': '/Applications/'
+- 'Store': 'Mirror'
+  'Recurse': |-
+    false
+  'Fileset': 'Applications'
+  'PoolPath': 'Applications'
+  'LastRev': |-
+    15
+  'LastSync': '20120925T143856'
+  'Path': '/Applications/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'MyApplications'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Applications/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'MyApplications'
+  'PoolPath': 'Applications'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Applications/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Archives'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Archives/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Archives'
+  'PoolPath': 'Applications'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Archives/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Contracts'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Contracts/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Contracts'
+  'PoolPath': 'Contracts'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Contracts/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Databases'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Databases/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Databases'
+  'PoolPath': 'Databases'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Databases/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Documents'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Documents/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Documents'
+  'PoolPath': 'Documents'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Documents/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Downloads'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Downloads/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Downloads'
+  'PoolPath': 'Downloads'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Downloads/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Library'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': '20120925T143258'
+  'Path': '/Library/'
+- 'Store': 'Mirror'
+  'Recurse': |-
+    false
+  'Fileset': 'Library'
+  'PoolPath': 'Library'
+  'LastRev': |-
+    15
+  'LastSync': '20120925T143258'
+  'Path': '/Library/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'MyLibrary'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Library/'
+- 'Store': 'Mirror'
+  'Recurse': |-
+    false
+  'Fileset': 'MyLibrary'
+  'PoolPath': 'Home/Library'
+  'LastRev': null
+  'LastSync': null
+  'Path': '~/Library/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'MyAppSupport'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Library/Application Support/'
+- 'Store': 'Mirror'
+  'Recurse': |-
+    false
+  'Fileset': 'MyAppSupport'
+  'PoolPath': null
+  'LastRev': null
+  'LastSync': |-
+    null
+  'Path': '~/Library/Application Support/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Messages'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Messages/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Messages'
+  'PoolPath': 'Messages'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Messages/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Mirrors'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Mirrors/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Mirrors'
+  'PoolPath': 'Mirrors'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Mirrors/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Movies'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Movies/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Movies'
+  'PoolPath': 'Movies'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Movies/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Music'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Music/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Music'
+  'PoolPath': 'Music'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Music/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Pictures'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Pictures/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Pictures'
+  'PoolPath': 'Pictures'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Pictures/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'Projects'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': |-
+    null
+  'Path': '~/Projects/'
+- 'Store': 'Data'
+  'Recurse': |-
+    false
+  'Fileset': 'Projects'
+  'PoolPath': 'Projects'
+  'LastRev': |-
+    14
+  'LastSync': |-
+    null
+  'Path': '~/Projects/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'home'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': '20120925T143318'
+  'Path': '~/'
+- 'Store': 'Mirror'
+  'Recurse': |-
+    false
+  'Fileset': 'home'
+  'PoolPath': 'Home'
+  'LastRev': |-
+    15
+  'LastSync': '20120925T143318'
+  'Path': '~/'
+- 'Store': 'Vulcan,Hermes'
+  'Recurse': |-
+    false
+  'Fileset': 'local'
+  'PoolPath': |-
+    null
+  'LastRev': |-
+    null
+  'LastSync': '20120925T143813'
+  'Path': '/usr/local/'
+- 'Store': 'Mirror'
+  'Recurse': |-
+    false
+  'Fileset': 'local'
+  'PoolPath': 'Local'
+  'LastRev': |-
+    15
+  'LastSync': '20120925T143813'
+  'Path': '/usr/local/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Applications'
+  'PoolPath': 'Backups/System/Applications'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '/Applications/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'MyApplications'
+  'PoolPath': 'Data/Applications'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Applications/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Archives'
+  'PoolPath': 'Data/Applications'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Archives/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Contracts'
+  'PoolPath': 'Data/Contracts'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Contracts/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Databases'
+  'PoolPath': 'Data/Databases'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Databases/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Documents'
+  'PoolPath': 'Data/Documents'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Documents/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Downloads'
+  'PoolPath': 'Data/Downloads'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Downloads/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Library'
+  'PoolPath': 'Backups/System/Library'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '/Library/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'MyLibrary'
+  'PoolPath': 'Backups/System/Home/Library'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Library/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'MyAppSupport'
+  'PoolPath': 'Backups/System/Home/Library/Application Support'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Library/Application Support/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Messages'
+  'PoolPath': 'Data/Messages'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Messages/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Mirrors'
+  'PoolPath': 'Data/Mirrors'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Mirrors/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Movies'
+  'PoolPath': 'Data/Movies'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Movies/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Music'
+  'PoolPath': 'Data/Music'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Music/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Pictures'
+  'PoolPath': 'Data/Pictures'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Pictures/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'Projects'
+  'PoolPath': 'Data/Projects'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/Projects/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'home'
+  'PoolPath': 'Backups/System/Home'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '~/'
+- 'Store': 'Titan'
+  'Recurse': |-
+    false
+  'Fileset': 'local'
+  'PoolPath': 'Backups/System/Local'
+  'LastRev': |-
+    13
+  'LastSync': |-
+    null
+  'Path': '/usr/local/'

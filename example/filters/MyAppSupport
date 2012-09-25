@@ -1,0 +1,136 @@
++ /1Password/
+- /AddressBook/
++ /Adium 2.0/
++ /Adobe/
++ /Amazon/
++ /Aperture/
++ /AppFresh/
++ /Awaken/
++ /Bento/
++ /Blizzard/
++ /Boxer/
++ /CANON INC/
++ /CSSEdit/
++ /Certificate Authority/
++ /ChronoSync/
++ /Citrix Receiver/
++ /Colloquy/
++ /ColorSchemer/
+- /Console/
++ /CrashPlan/
++ /CrashReporter/
++ /Cultured Code/
++ /DEVONagent/
++ /DEVONthink Pro 2/
++ /DEVONthink Sorter/
++ /DMI/
++ /DPP/
++ /DVD Player/
++ /DataGraph/
++ /Daylite/
++ /Delivery Status/
++ /Developer/
++ /Digiarty/
+- /Dock/
++ /DxO Optics Pro/
++ /EasyFind/
++ /ExpanDrive/
++ /Expression Media/
++ /Exult/
++ /Firefox/
++ /Fluid/
++ /ForkLift/
++ /GarageBuy/
++ /GitHub for Mac/
++ /Google Earth/
++ /Google/
++ /Growl/
+- /Instruments/
++ /JNXLicenses/
++ /JollysFastVNC/
++ /Kindle/
++ /L8457789120
++ /LaunchBar/
+- /LaunchBar/Habits.plist
+- /Librarian/
+- /Linotype/
++ /LittleSnapper/
++ /MacSword/
++ /Mactracker/
++ /Mail/
++ /Marked/
++ /Mellel/
++ /Merlin/
++ /Microsoft/
+- /Microsoft/Silverlight/
+- /MobileSync/
++ /Mozilla/
++ /MrGeckosMedia/
++ /Mumble/
+- /NVIDIA/
++ /NetNewsWire/
+- /NotificationCenter/
++ /Notify/
++ /Omni Group/
++ /OmniGraffle/
++ /OmniOutliner 3/
+- /OpenMeta/
+- /Opera/
++ /Phase One Media Pro/
++ /PhoneView/
++ /Platypus/
++ /Preview/
++ /QuickBooks/
+- /QuickBoot/
++ /Screen Sharing/
++ /Shimo/
++ /SiteSucker/
++ /Skype/
++ /SkypeCookieStorage
++ /SkypeLogoffURL
++ /Soulver/
++ /SourceTree/
+- /SpamSieve/
++ /Speed Download/
+- /SpiceRack/
++ /Steam/
++ /Stellarium/
+- /SyncServices/
++ /TextExpander/
++ /TextMate/
++ /The Omni Group/
++ /Transmission/
++ /TrueCrypt/
++ /Tunnelblick/
++ /TweetDeck/
+- /Ubiquity/
++ /VMware Fusion/
++ /Virtual ][/
+- /Wacom/
++ /Web Snapper/
+- /WhatSize/
++ /WireTap Studio/
+- /com.apple.QuickLook/
+- /com.apple.TCC/
++ /com.mactrackerapp.Mactracker/
++ /eSellerate/
++ /ecto3/
+- /iCloud/
++ /iDefrag/
++ /iFlash/
+- /iLifeAssetManagement/
++ /iLifeMediaBrowser/
+- /iLifePageLayout/
++ /iPartition/
+- /iPhone Simulator/
++ /iSale 5/
++ /iStockphotoAperturePlugin/
++ /iTerm/
++ /iWork/
++ /org.videolan.vlc/
+- /*
+- /*/
+- /.[A-Za-z0-9_]*
+- /.[A-Za-z0-9_]*/
+- /.*
+- /.*/
