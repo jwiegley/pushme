@@ -418,10 +418,7 @@ reportMissingFiles fs = do
                    (L.map toString
                     . L.filter (`notElem` [ ".DS_Store", ".localized" ])
                     $ files)
-    traverse_ (\x -> warningL $
-                     format "{} not mentioned in {}"
-                            [ fromString x, toTextIgnore optsFile ])
-              files'
+    traverse_ (\x -> warningL $ format "Unknown path: \"{}\"" [x]) files'
 
 systemVolCopy :: Text -> FilePath -> Text -> Sh ()
 systemVolCopy label src dest = do
@@ -441,7 +438,7 @@ volcopy useSudo options src dest = errExit False $ do
   let shhh     = not deb && not verb
       toRemote = ":" `isInfixOf` dest
       options' =
-        [ "-aHAXEy"
+        [ "-aHXEy"              -- jww (2012-09-23): maybe -A too?
         , "--fileflags"
         , "--delete-after"
         , "--ignore-errors"
@@ -525,7 +522,10 @@ convertPath = toString
 readDataFile :: FromJSON a => Text -> IO [a]
 readDataFile p = do
   p' <- getHomePath p
-  fromJust <$> Data.Yaml.decode <$> BC.readFile (convertPath p')
+  d  <- Data.Yaml.decode <$> BC.readFile (convertPath p')
+  case d of
+    Nothing -> error $ toString $ "Failed to read file " <> p
+    Just d' -> return d'
 
 writeDataFile :: ToJSON a => Text -> a -> IO ()
 writeDataFile p xs =
