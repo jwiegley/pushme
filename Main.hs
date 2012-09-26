@@ -17,6 +17,7 @@ import           Control.Monad
 import           Data.Aeson hiding ((.:))
 import           Data.Aeson.TH
 import qualified Data.ByteString.Char8 as BC
+import           Data.Char
 import           Data.Foldable hiding (elem, notElem)
 import           Data.Function
 import           Data.Function.Pointless
@@ -77,7 +78,9 @@ pushmeSummary = "pushme v" ++ version ++ ", (C) John Wiegley " ++ copyright
 data PushmeOpts = PushmeOpts { jobs      :: Int
                              , dryRun    :: Bool
                              , noSync    :: Bool
+                             , loadRevs  :: Bool
                              , stores    :: Bool
+                             , ssh       :: String
                              , filesets  :: String
                              , classes   :: String
                              , verbose   :: Bool
@@ -94,7 +97,10 @@ pushmeOpts = PushmeOpts
                       &= help "Don't take any actions"
     , noSync    = def &= name "N"
                       &= help "Don't even attempt a dry-run sync"
+    , loadRevs  = def &= name "L"
+                      &= help "Load latest snapshot revs from disk"
     , stores    = def &= help "Show all the stores know to pushme"
+    , ssh       = def &= help "Use a specific ssh command"
     , filesets  = def &= name "f"
                       &= help "Synchronize the given fileset(s) (comma-sep)"
     , classes   = def &= name "c"
@@ -205,13 +211,15 @@ testme = runPushme
          PushmeOpts { jobs      = 1
                     , dryRun    = True
                     , noSync    = True
+                    , loadRevs  = True
                     , stores    = False
+                    , ssh       = ""
                     , filesets  = ""
                     , classes   = ""
                     , verbose   = True
-                    , quiet     = True
-                    , debug     = False
-                    , arguments = ["titan"] }
+                    , quiet     = False
+                    , debug     = True
+                    , arguments = ["@data", "data/titan"] }
 
 runPushme :: PushmeOpts -> IO ()
 runPushme opts = do
@@ -243,14 +251,14 @@ runPushme opts = do
 pushmeCommand :: PushmeOpts -> [Store] -> [Fileset] -> [Container] -> IO ()
 pushmeCommand opts sts fsets cts
   | stores opts =
-    for_ sts $ \st -> shelly $ do
-      echo (st^.storeHostRe)
-      for_ (st^.storeTargets) $ \(targStName, targFilesets) -> do
-        echo targStName
-        for_ targFilesets $ \fsName ->
-          echo fsName
-               -- (formatTime defaultTimeLocale "%Y/%m/%d %H:%M:%S"
-               --             (st^.storeLastSync))
+    for_ (L.sortBy (compare `on` (^.containerFileset)) cts) $ \ct ->
+      putStrLn $
+        printf "%-20s %-30.30s   %19s %5d"
+               (toString (ct^.containerStore))
+               (toString (toTextIgnore (ct^.containerPath)))
+               (maybe "" (formatTime defaultTimeLocale "%Y/%m/%d %H:%M:%S")
+                      (ct^.containerLastSync))
+               (fromMaybe 0 (ct^.containerLastRev))
 
   | otherwise = do
     here <- shelly $ silently $ cmd "hostname"
@@ -262,7 +270,7 @@ pushmeCommand opts sts fsets cts
       L.foldl'
         (\acc host -> do
             innerCts   <- acc
-            updatedCts <- shelly $ do
+            updatedCts <- shelly $
               processHost (here,this) sts fsets innerCts (fromString host)
             -- This can get expensive fast, but the number of containers
             -- involved should never be large.  The idea is to gather the most
@@ -278,70 +286,91 @@ pushmeCommand opts sts fsets cts
 
 processHost :: (Text, Store) -> [Store] -> [Fileset] -> [Container] -> Text
             -> Sh [Container]
-processHost defaultSelf sts fsets conts thereRaw = do
-  let (self@(_, this), snapshotBefore, thereRaw') =
-        if "/" `isInfixOf` thereRaw
-        then let [b, e]     = T.splitOn "/" thereRaw
-                 (b', snap) = splitSnap b
-             in ((b', findStore b' sts), snap, e)
-        else (defaultSelf, False, thereRaw)
+processHost defaultSelf@(here, _) sts fsets conts thereRaw
+  | T.head thereRaw == '@' =
+    let there = T.drop 1 thereRaw
+        that  = findStore there sts
+    in mconcat <$>
+       (sequence
+        $ L.map
+            (\x -> do
+                bnd <- x
+                let info = bnd^.bindingThat
+                createSnapshot (storeIsLocal here (info^.infoStore)) info)
+        $ L.map
+            (\x -> createBinding defaultSelf (there,that) fsets conts
+                                (x^.containerFileset))
+            (containersForStore that conts))
 
-      (there, snapshotAfter) = splitSnap thereRaw'
-      that = findStore there sts
+  | otherwise = do
+    let (self@(_, this), there) =
+          if "/" `isInfixOf` thereRaw
+          then let [b, e] = T.splitOn "/" thereRaw
+               in ((b, findStore b sts), e)
+          else (defaultSelf, thereRaw)
+        that = findStore there sts
 
-  debugL $ (this^.storeHostRe) <> " -> " <> fromString (show this)
-  debugL $ there <> " -> " <> fromString (show that)
+    debugL $ (this^.storeHostRe) <> " -> " <> fromString (show this)
+    debugL $ there <> " -> " <> fromString (show that)
 
-  noticeL $ format "Synchronizing {} -> {}" [ this^.storeName
-                                           , that^.storeName ]
+    noticeL $ format "Synchronizing {} -> {}" [ this^.storeName
+                                             , that^.storeName ]
 
-  case L.lookup (that^.storeName) (this^.storeTargets) of
-    Nothing -> warningL "Nothing to do" >> return []
+    case L.lookup (that^.storeName) (this^.storeTargets) of
+      Nothing -> warningL "Nothing to do" >> return []
 
-    Just xs -> do
-      fss <- fromString <$> getOption filesets
-      cls <- fromString <$> getOption classes
+      Just xs -> do
+        fss <- fromString <$> getOption filesets
+        cls <- fromString <$> getOption classes
 
-      let mappings =
-            L.map (createBinding self (there,that) fsets conts) xs
+        mappings <-
+          traverse (createBinding self (there,that) fsets conts) xs
 
-          filteredMappings =
-            L.filter
-              (\x -> (T.null fss ||
-                      matchText fss (x^.bindingFileset.filesetName))
-                     && (T.null cls ||
-                         matchText cls (x^.bindingFileset.filesetClass)))
-              mappings
+        let filteredMappings =
+              L.filter
+                (\x -> (T.null fss ||
+                        matchText fss (x^.bindingFileset.filesetName))
+                       && (T.null cls ||
+                           matchText cls (x^.bindingFileset.filesetClass)))
+                mappings
 
-          sortedMappings =
-            L.sortBy (compare `on` (^.bindingFileset.filesetPriority))
-                     filteredMappings
+            sortedMappings =
+              L.sortBy (compare `on` (^.bindingFileset.filesetPriority))
+                       filteredMappings
 
-      for_ sortedMappings $ \bnd ->
-        when (bnd^.bindingFileset.filesetReportMissing) $
-          reportMissingFiles (bnd^.bindingFileset.filesetName)
-                             (bnd^.bindingThis.infoContainer)
+        for_ sortedMappings $ \bnd ->
+          when (bnd^.bindingFileset.filesetReportMissing) $
+            reportMissingFiles (bnd^.bindingFileset.filesetName)
+                               (bnd^.bindingThis.infoContainer)
 
-      updatedContainers <-
-        liftIO $ parallel $
-          L.map
-            (\bnd -> shelly $ do
-                cts1 <- if snapshotBefore
-                        then createSnapshot True (bnd^.bindingThis)
-                        else return []
-                cts2 <- syncContainers bnd
-                let local = storeIsLocal (bnd^.bindingThis.infoHostName)
-                                         (bnd^.bindingThat^.infoStore)
-                cts3 <- if snapshotAfter
-                        then createSnapshot local (bnd^.bindingThat)
-                        else return []
-                return $ cts1 ++ cts2 ++ cts3) sortedMappings
+        updatedContainers <-
+          liftIO $ parallel $
+            L.map (shelly . syncContainers) sortedMappings
 
-      return $ mconcat updatedContainers
+        return $ mconcat updatedContainers
 
-  where splitSnap n = if "@" `isInfixOf` n
-                      then (T.takeWhile (/= '@') n, True)
-                      else (n, False)
+zfsPoolPath :: Info -> FilePath
+zfsPoolPath info =
+      fromMaybe (error $ "storeZfsPool is Nothing: " ++ show info)
+                (info^.infoStore.storeZfsPool)
+  </> fromMaybe (error $ "containerPoolPath is Nothing: " ++ show info)
+                (info^.infoContainer.containerPoolPath)
+
+zfsFilePath :: Info -> IO FilePath
+zfsFilePath info = do
+  Pathname p <-
+    getPathname $
+          fromMaybe (error $ "storeZfsPath is Nothing: " ++ show info)
+                    (info^.infoStore.storeZfsPath)
+      </> fromMaybe (error $ "containerPoolPath is Nothing: " ++ show info)
+                    (info^.infoContainer.containerPoolPath)
+  return p
+
+getZfsPath :: Info -> Bool -> IO ContainerPath
+getZfsPath info bothZfs
+  | bothZfs    = return $ ZfsFilesystem $ toTextIgnore $ zfsPoolPath info
+  | isZfs info = Pathname <$> zfsFilePath info
+  | otherwise  = getPathname (info^.infoContainer.containerPath)
 
 createSnapshot :: Bool -> Info -> Sh [Container]
 createSnapshot local info
@@ -349,8 +378,7 @@ createSnapshot local info
     let cont         = info^.infoContainer
         lastRev      = cont^.containerLastRev
         nextRev      = case lastRev of Nothing -> 1; Just x -> succ x
-        poolName     = fromJust (info^.infoStore.storeZfsPool)
-                       </> fromJust (cont^.containerPoolPath)
+        poolName     = zfsPoolPath info
         thatSnapshot = toTextIgnore poolName <> "@" <> intToText nextRev
         snapCmd      = ["zfs", "snapshot"]
                     <> ["-r" | cont^.containerRecurse]
@@ -362,10 +390,9 @@ createSnapshot local info
       then
         vrun_ "sudo" snapCmd
       else do
-        ssh <- which "ssh"
         let u = info^.infoStore.storeUserName
             h = info^.infoHostName
-        vrun_ (fromJust ssh) $ [format "{}@{}" [u, h]] <> snapCmd
+        remote vrun_ (format "{}@{}" [u, h]) snapCmd
 
     return [containerLastRev .~ Just nextRev $ cont]
 
@@ -405,22 +432,57 @@ reportMissingFiles label cont = do
       warningL $ format "{}: unknown: \"{}\"" [label, fromString f]
 
 createBinding :: (Text, Store) -> (Text, Store) -> [Fileset] -> [Container]
-              -> Text -> Binding
-createBinding (here,this) (there,that) fsets conts n =
-  case L.find (\x -> x^.filesetName == n) fsets of
-    Nothing ->
-      error $ toString  $ "Could not find fileset: " <> n
-    Just fs ->
-      Binding {
-          _bindingThis =
-             Info { _infoHostName  = here
-                  , _infoStore     = this
-                  , _infoContainer = findContainer fs this conts }
-        , _bindingThat =
-             Info { _infoHostName  = there
-                  , _infoStore     = that
-                  , _infoContainer = findContainer fs that conts }
-        , _bindingFileset = fs }
+              -> Text -> Sh Binding
+createBinding (here,this) (there,that) fsets conts n = do
+  let bnd =
+        case L.find (\x -> x^.filesetName == n) fsets of
+          Nothing ->
+            error $ toString  $ "Could not find fileset: " <> n
+          Just fs ->
+            Binding {
+                _bindingThis =
+                   Info { _infoHostName  = here
+                        , _infoStore     = this
+                        , _infoContainer = findContainer fs this conts }
+              , _bindingThat =
+                   Info { _infoHostName  = there
+                        , _infoStore     = that
+                        , _infoContainer = findContainer fs that conts }
+              , _bindingFileset = fs }
+  load <- getOption loadRevs
+  if load
+    then do
+      thisContRev <- containerRev (bnd^.bindingThis)
+      thatContRev <- containerRev (bnd^.bindingThat)
+      let l = infoContainer.containerLastRev
+      return $ bindingThis.l .~ (D.trace ("thisContRev:" ++ show thisContRev) thisContRev)
+             $ bindingThat.l .~ (D.trace ("thatContRev:" ++ show thatContRev) thatContRev) $ bnd
+    else return bnd
+
+  where
+    containerRev info = silently $ do
+      p <- liftIO $ zfsFilePath info
+      let p' = toTextIgnore $ p </> fromText ".zfs" </> fromText "snapshot"
+          u  = info^.infoStore.storeUserName
+          h  = info^.infoHostName
+          hn = format "{}@{}" [u, h]
+      listing <- L.sort <$> L.map (read . toString) <$>
+                L.filter (T.all isDigit) <$> T.lines <$>
+                if storeIsLocal here (info^.infoStore)
+                then vrun "ls" ["-1", p']
+                else remote vrun hn ["ls", "-1", p']
+      if L.length listing == 0
+        then return Nothing
+        else return . Just . L.last $ listing
+
+containersForStore :: Store -> [Container] -> [Container]
+containersForStore store conts =
+  L.filter (\x ->
+             let stName = x^.containerStore
+                 names  = if "," `isInfixOf` stName
+                          then T.splitOn "," stName
+                          else [stName]
+             in (store^.storeName) `elem` names) conts
 
 findContainer :: Fileset -> Store -> [Container] -> Container
 findContainer fileset store conts =
@@ -428,13 +490,8 @@ findContainer fileset store conts =
     (error $ toString $
      format "Could not find container for Store {} + Fileset {}"
      [ store^.storeName, fileset^.filesetName ]) $
-    L.find (\x ->
-             let stName = x^.containerStore
-                 names  = if "," `isInfixOf` stName
-                          then T.splitOn "," stName
-                          else [stName]
-             in (x^.containerFileset) == (fileset^.filesetName)
-                && (store^.storeName) `elem` names) conts
+    L.find (\x -> (x^.containerFileset) == (fileset^.filesetName))
+           (containersForStore store conts)
 
 mergeContainers :: Container -> Container -> Container
 x `mergeContainers` y
@@ -517,27 +574,10 @@ getPathname fp = do
                                  then T.append p "/"
                                  else p
 
-getZfsPath :: Info -> Bool -> IO ContainerPath
-getZfsPath info bothZfs
-  | bothZfs =
-    return $ ZfsFilesystem $ toTextIgnore $
-          fromText (fromJust (store^.storeZfsPool))
-      </> fromJust (cont^.containerPoolPath)
-
-  | isZfs info =
-    getPathname $ fromJust (store^.storeZfsPath)
-              </> fromJust (cont^.containerPoolPath)
-
-  | otherwise = getPathname (cont^.containerPath)
-
-  where cont  = info^.infoContainer
-        store = info^.infoStore
-
 sourcePath :: Binding -> IO FullPath
 sourcePath bnd
   | bothSidesZfs this that =
-    let poolPath = toTextIgnore $
-                   fromText thisPool </> fromJust (thisCont^.containerPoolPath)
+    let poolPath = toTextIgnore $ zfsPoolPath this
     in case (thisCont^.containerLastRev, thatCont^.containerLastRev) of
          (Just thisRev, Just thatRev) ->
            if thisRev > thatRev
@@ -549,19 +589,15 @@ sourcePath bnd
            return $ LocalPath $ ZfsFilesystem poolPath
 
   | isZfs this =
-    LocalPath <$> getPathname (fromJust (thisStore^.storeZfsPath)
-                               </> fromJust (thisCont^.containerPoolPath))
+    LocalPath <$> (Pathname <$> zfsFilePath this)
 
   | otherwise =
-    LocalPath <$>
-    getPathname (bnd^.bindingThis.infoContainer.containerPath)
+    LocalPath <$> getPathname (bnd^.bindingThis.infoContainer.containerPath)
 
   where this      = bnd^.bindingThis
         that      = bnd^.bindingThat
         thisCont  = this^.infoContainer
         thatCont  = that^.infoContainer
-        thisStore = this^.infoStore
-        thisPool  = fromJust (thisStore^.storeZfsPool)
 
 destinationPath :: Binding -> IO FullPath
 destinationPath bnd
@@ -578,7 +614,7 @@ destinationPath bnd
         that = bnd^.bindingThat
 
 syncContainers :: Binding -> Sh [Container]
-syncContainers bnd = do
+syncContainers bnd = errExit False $ do
   verb  <- getOption verbose
 
   noticeL $ format "Sending {}/{} → {}"
@@ -613,7 +649,7 @@ createSyncCommands bnd = do
 
   case (src, dst) of
     (LocalPath NoPath, _) ->
-      return ( infoL "Nothing to do" >> return []
+      return ( infoL "No sync needed" >> return []
              , return []
              , return [] )
 
@@ -701,12 +737,9 @@ createSyncCommands bnd = do
                <> ["-d" | recurse]
                <> ["-F", pool]
 
-    remoteReceive u h pool recurse = do
-      ssh <- which "ssh"
-      return $ [ toTextIgnore (fromJust ssh), format "{}@{}" [u, h]
-               , "zfs", "recv"]
-               <> ["-d" | recurse]
-               <> ["-F", pool ]
+    remoteReceive u h pool recurse =
+      remote (\x xs -> return (toTextIgnore x:xs)) (format "{}@{}" [u, h]) $
+             ["zfs", "recv"] <> ["-d" | recurse] <> ["-F", pool ]
 
 systemVolCopy :: Text -> FilePath -> Text -> Sh [Text]
 systemVolCopy label src dest = do
@@ -716,7 +749,7 @@ systemVolCopy label src dest = do
   volcopy True rsyncOptions (toTextIgnore src) dest
 
 volcopy :: Bool -> [Text] -> Text -> Text -> Sh [Text]
-volcopy useSudo options src dest = errExit False $ do
+volcopy useSudo options src dest = do
   infoL $ format "{} → {}" [src, dest]
 
   dry  <- getOption dryRun
@@ -836,7 +869,14 @@ intToText :: Int -> Text
 intToText = fromString . show
 
 remote :: (FilePath -> [Text] -> Sh a) -> Text -> [Text] -> Sh a
-remote f host xs = f "ssh" (host:xs)
+remote f host xs = do
+  sshCmd <- getOption ssh
+  p <- if L.null sshCmd
+      then which "ssh"
+      else return . Just . fromText . T.pack $ sshCmd
+  case p of
+    Nothing -> error "Could not find ssh!"
+    Just r  -> f r (host:xs)
 
 asRoot :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
 asRoot f p xs =
