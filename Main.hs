@@ -124,7 +124,7 @@ data Fileset = Fileset { _filesetName          :: Text
                        , _filesetClass         :: Text
                        , _filesetPriority      :: Int
                        , _filesetReportMissing :: Bool }
-               deriving Show
+               deriving (Show, Eq)
 
 makeLenses ''Fileset
 
@@ -142,7 +142,7 @@ data Container = Container { _containerFileset  :: Text
                            , _containerRecurse  :: Bool
                            , _containerLastRev  :: Maybe Int
                            , _containerLastSync :: Maybe LocalTime }
-               deriving Show
+               deriving (Show, Eq)
 
 makeLenses ''Container
 
@@ -167,7 +167,7 @@ data Store = Store { _storeName     :: Text
                    -- Container list by the Store/Fileset name pair for both
                    -- source and target.
                    , _storeTargets  :: [(Text, [Text])] }
-           deriving Show
+           deriving (Show, Eq)
 
 makeLenses ''Store
 
@@ -179,14 +179,14 @@ instance NFData Store where
 data Info = Info { _infoHostName  :: Text
                  , _infoStore     :: Store
                  , _infoContainer :: Container }
-          deriving Show
+          deriving (Show, Eq)
 
 makeLenses ''Info
 
 data Binding = Binding { _bindingThis    :: Info
                        , _bindingThat    :: Info
                        , _bindingFileset :: Fileset }
-             deriving Show
+             deriving (Show, Eq)
 
 makeLenses ''Binding
 
@@ -259,7 +259,12 @@ pushmeCommand opts sts fsets cts
             (\(_, fs) ->
                 (T.null fss || matchText fss (fs^.filesetName))
               && (T.null cls || matchText cls (fs^.filesetClass))) $
-          L.map (\x -> (x, findFileset (x^.containerFileset) fsets)) cts
+          L.map (\x -> (x, findFileset (x^.containerFileset) fsets)) $
+          case arguments opts of
+            [] -> cts
+            xs -> L.nub $ mconcat $ L.map (\st -> containersForStore st cts) $
+                 L.map (\n -> findStore (fromString n) sts) xs
+
     in for_ sorted $ \(ct, _) ->
          putStrLn $
            printf "%-12s %-38.38s   %19s %5d"
@@ -299,10 +304,10 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
   | T.head thereRaw == '@' = do
     let there = T.drop 1 thereRaw
         that  = findStore there sts
-    bindings <- traverse (\x -> createBinding defaultSelf (there,that)
-                                            fsets conts
-                                            (x^.containerFileset))
-                        (containersForStore that conts)
+    bindings <-
+      traverse (\x -> createBinding defaultSelf (there,that) fsets conts
+                                   (x^.containerFileset))
+               (containersForStore that conts)
     sorted   <- filterAndSortBindings bindings
     mconcat <$>
       (sequence $ flip L.map sorted $ \bnd -> do
@@ -545,7 +550,7 @@ findFileset n fsets =
 findStore :: Text -> [Store] -> Store
 findStore n sts =
   fromMaybe
-    (error $ toString $ "Could not find store matching name " <> n) $
+    (error $ toString $ "Could not find store matching hostname " <> n) $
     L.find (\x -> matchText (x^.storeHostRe) n) sts
 
 storeIsLocal :: Text -> Store -> Bool
@@ -563,11 +568,11 @@ data ContainerPath = NoPath
                    | ZfsFilesystem Text
                    | ZfsSnapshot Text Int
                    | ZfsSnapshotRange Text Int Int
-                   deriving Show
+                   deriving (Show, Eq)
 
 data FullPath = LocalPath ContainerPath
               | RemotePath Text Text ContainerPath
-              deriving Show
+              deriving (Show, Eq)
 
 convertPath :: FilePath -> String
 convertPath = toString
