@@ -763,13 +763,14 @@ systemVolCopy label src dest = do
   optsFile <- liftIO $ getHomePath (".pushme/filters/" <> label)
   exists   <- liftIO $ isFile optsFile
   let rsyncOptions = ["--include-from=" <> toTextIgnore optsFile | exists]
-  volcopy True rsyncOptions (toTextIgnore src) dest
+  volcopy label True rsyncOptions (toTextIgnore src) dest
 
-volcopy :: Bool -> [Text] -> Text -> Text -> Sh [Text]
-volcopy useSudo options src dest = do
+volcopy :: Text -> Bool -> [Text] -> Text -> Text -> Sh [Text]
+volcopy label useSudo options src dest = do
   infoL $ format "{} → {}" [src, dest]
 
   dry  <- getOption dryRun
+  noSy <- getOption noSync
   deb  <- getOption debug
   verb <- getOption verbose
 
@@ -814,7 +815,7 @@ volcopy useSudo options src dest = do
   case rsync of
     Nothing -> error "Could not find rsync!"
     Just r  ->
-      if shhh
+      if shhh && not noSy
       then silently $ do
         output <- doCopy (drun False) r toRemote useSudo options'
         let stats = M.fromList $
@@ -826,8 +827,9 @@ volcopy useSudo options src dest = do
             sent  = field "Number of files transferred" stats
             total = field "Total file size" stats
             xfer  = field "Total transferred file size" stats
-        noticeL $ format "Sent {} in {} files (out of {} in {})"
-                         [ fromString (humanReadable xfer),
+        noticeL $ format "{}: Sent {} in {} files (out of {} in {})"
+                         [ label
+                         , fromString (humanReadable xfer),
                            commaSep (fromIntegral sent)
                          , fromString (humanReadable total),
                            commaSep (fromIntegral files) ]
