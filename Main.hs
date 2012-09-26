@@ -637,6 +637,7 @@ syncContainers bnd = errExit False $ do
 
   sendArgs <- sendCmd
   unless (L.null sendArgs) $ do
+    noticeL $ intercalate " " sendArgs
     recvArgs <- recvCmd
     if L.null recvArgs
       then vrun_ (fromText (L.head sendArgs)) (L.tail sendArgs)
