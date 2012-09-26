@@ -29,18 +29,14 @@ Here is an example set of files for synchronizing my home directory and
 
 Then, `~/.pushme/filesets.yml`:
 
-    - 'Priority': |-
-        60
+    - 'Priority': 60
       'Name': 'home'
       'Class': 'quick,main'
-      'ReportMissing': |-
-        true
-    - 'Priority': |-
-        80
+      'ReportMissing': true
+    - 'Priority': 80
       'Name': 'local'
       'Class': 'system,main'
-      'ReportMissing': |-
-        false
+      'ReportMissing': false
 
 And finally, `~/.pushme/containers.yml`:
 
