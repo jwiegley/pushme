@@ -251,14 +251,23 @@ runPushme opts = do
 pushmeCommand :: PushmeOpts -> [Store] -> [Fileset] -> [Container] -> IO ()
 pushmeCommand opts sts fsets cts
   | stores opts =
-    for_ (L.sortBy (compare `on` (^.containerFileset)) cts) $ \ct ->
-      putStrLn $
-        printf "%-20s %-30.30s   %19s %5d"
-               (toString (ct^.containerStore))
-               (toString (toTextIgnore (ct^.containerPath)))
-               (maybe "" (formatTime defaultTimeLocale "%Y/%m/%d %H:%M:%S")
-                      (ct^.containerLastSync))
-               (fromMaybe 0 (ct^.containerLastRev))
+    let fss    = fromString $ filesets opts
+        cls    = fromString $ classes opts
+        sorted =
+          L.sortBy (compare `on` (^._2.filesetPriority)) $
+          L.filter
+            (\(_, fs) ->
+                (T.null fss || matchText fss (fs^.filesetName))
+              && (T.null cls || matchText cls (fs^.filesetClass))) $
+          L.map (\x -> (x, findFileset (x^.containerFileset) fsets)) cts
+    in for_ sorted $ \(ct, _) ->
+         putStrLn $
+           printf "%-12s %-38.38s   %19s %5d"
+                  (toString (ct^.containerStore))
+                  (toString (toTextIgnore (ct^.containerPath)))
+                  (maybe "" (formatTime defaultTimeLocale "%Y/%m/%d %H:%M:%S")
+                         (ct^.containerLastSync))
+                  (fromMaybe 0 (ct^.containerLastRev))
 
   | otherwise = do
     here <- shelly $ silently $ cmd "hostname"
@@ -287,20 +296,18 @@ pushmeCommand opts sts fsets cts
 processHost :: (Text, Store) -> [Store] -> [Fileset] -> [Container] -> Text
             -> Sh [Container]
 processHost defaultSelf@(here, _) sts fsets conts thereRaw
-  | T.head thereRaw == '@' =
+  | T.head thereRaw == '@' = do
     let there = T.drop 1 thereRaw
         that  = findStore there sts
-    in mconcat <$>
-       (sequence
-        $ L.map
-            (\x -> do
-                bnd <- x
-                let info = bnd^.bindingThat
-                createSnapshot (storeIsLocal here (info^.infoStore)) info)
-        $ L.map
-            (\x -> createBinding defaultSelf (there,that) fsets conts
-                                (x^.containerFileset))
-            (containersForStore that conts))
+    bindings <- traverse (\x -> createBinding defaultSelf (there,that)
+                                            fsets conts
+                                            (x^.containerFileset))
+                        (containersForStore that conts)
+    sorted   <- filterAndSortBindings bindings
+    mconcat <$>
+      (sequence $ flip L.map sorted $ \bnd -> do
+          let info = bnd^.bindingThat
+          createSnapshot (storeIsLocal here (info^.infoStore)) info)
 
   | otherwise = do
     let (self@(_, this), there) =
@@ -313,41 +320,39 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
     debugL $ (this^.storeHostRe) <> " -> " <> fromString (show this)
     debugL $ there <> " -> " <> fromString (show that)
 
-    noticeL $ format "Synchronizing {} -> {}" [ this^.storeName
-                                             , that^.storeName ]
+    noticeL $ format "Synchronizing {} -> {}"
+                     [this^.storeName , that^.storeName]
 
     case L.lookup (that^.storeName) (this^.storeTargets) of
       Nothing -> warningL "Nothing to do" >> return []
 
       Just xs -> do
-        fss <- fromString <$> getOption filesets
-        cls <- fromString <$> getOption classes
-
-        mappings <-
+        bindings <-
           traverse (createBinding self (there,that) fsets conts) xs
-
-        let filteredMappings =
-              L.filter
-                (\x -> (T.null fss ||
-                        matchText fss (x^.bindingFileset.filesetName))
-                       && (T.null cls ||
-                           matchText cls (x^.bindingFileset.filesetClass)))
-                mappings
-
-            sortedMappings =
-              L.sortBy (compare `on` (^.bindingFileset.filesetPriority))
-                       filteredMappings
-
+        sortedMappings <- filterAndSortBindings bindings
         for_ sortedMappings $ \bnd ->
           when (bnd^.bindingFileset.filesetReportMissing) $
             reportMissingFiles (bnd^.bindingFileset.filesetName)
                                (bnd^.bindingThis.infoContainer)
-
         updatedContainers <-
           liftIO $ parallel $
             L.map (shelly . syncContainers) sortedMappings
 
         return $ mconcat updatedContainers
+
+  where
+    filterAndSortBindings bindings = do
+      fss <- fromString <$> getOption filesets
+      cls <- fromString <$> getOption classes
+
+      return $
+        L.sortBy (compare `on` (^.bindingFileset.filesetPriority)) $
+        L.filter
+          (\x -> (T.null fss ||
+                  matchText fss (x^.bindingFileset.filesetName))
+                 && (T.null cls ||
+                     matchText cls (x^.bindingFileset.filesetClass)))
+          bindings
 
 zfsPoolPath :: Info -> FilePath
 zfsPoolPath info =
@@ -530,6 +535,12 @@ updateContainers rev bnd = do
   return [ update (bnd^.bindingThis.infoContainer)
          , containerLastRev .~ rev $
            update (bnd^.bindingThat.infoContainer) ]
+
+findFileset :: Text -> [Fileset] -> Fileset
+findFileset n fsets =
+  fromMaybe
+    (error $ toString $ "Could not find fileset matching name " <> n) $
+    L.find (\x -> n == x^.filesetName) fsets
 
 findStore :: Text -> [Store] -> Store
 findStore n sts =
