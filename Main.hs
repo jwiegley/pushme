@@ -8,48 +8,47 @@
 
 module Main where
 
-import           Control.Applicative
-import           Control.Concurrent.ParallelIO
-import           Control.DeepSeq
-import           Control.Exception
-import           Control.Lens hiding (value)
-import           Control.Monad
-import           Data.Aeson hiding ((.:))
-import           Data.Aeson.TH
-import qualified Data.ByteString.Char8 as BC
-import           Data.Char
-import           Data.Foldable hiding (elem, notElem)
-import           Data.Function
-import           Data.Function.Pointless
-import qualified Data.List as L
-import qualified Data.Map as M
-import           Data.Maybe
-import           Data.Monoid
-import           Data.Stringable as S hiding (fromText)
-import           Data.Text.Format
-import           Data.Text.Lazy as T
-import           Data.Time.Clock
-import           Data.Time.Format
+import           Control.Concurrent.ParallelIO ( stopGlobalPool, parallel )
+import           Control.DeepSeq ( NFData(..) )
+import           Control.Exception ( SomeException, Exception, catch )
+import           Control.Lens hiding ( value )
+import           Control.Monad ( void, liftM2, (>=>) )
+import           Data.Aeson ( ToJSON(..), FromJSON(..) )
+import           Data.Aeson.TH ( deriveJSON )
+import qualified Data.ByteString.Char8 as BC ( writeFile, readFile )
+import           Data.Char ( isDigit )
+import           Data.Foldable ( for_ )
+import           Data.Function ( on )
+import           Data.Function.Pointless ( (.:) )
+import           Data.List
+import qualified Data.Map as M ( fromList, (!) )
+import           Data.Maybe ( fromMaybe, isNothing, isJust, fromJust )
+import           Data.Monoid ( Monoid(mconcat), (<>) )
+import           Data.Stringable as S ( Stringable(fromString, toString) )
+import           Data.Text.Format ( format )
+import           Data.Text.Lazy (Text)
+import qualified Data.Text.Lazy as T
+import           Data.Time.Clock ( getCurrentTime )
+import           Data.Time.Format ( readTime, formatTime )
 import           Data.Time.LocalTime
-import           Data.Yaml hiding ((.:))
-import           Debug.Trace as D
-import           Filesystem
-import           Filesystem.Path.CurrentOS hiding (fromText, (</>))
-import           GHC.Conc
+import           Data.Yaml ( encode, decode )
+import           Debug.Trace as D ()
+import           Filesystem ( isFile, getHomeDirectory )
+import           GHC.Conc ( setNumCapabilities, getNumProcessors )
 import           Prelude hiding (FilePath, catch)
-import           Shelly
+import           Shelly hiding (find)
 import           System.Console.CmdArgs
-import           System.Environment (getArgs, withArgs)
-import qualified System.FilePath.Glob as Glob
-import           System.IO (stderr)
-import           System.IO.Storage
-import           System.Locale
-import           System.Log.Formatter
-import           System.Log.Handler (setFormatter)
-import           System.Log.Handler.Simple (streamHandler)
+import           System.Environment ( getArgs, withArgs )
+import qualified System.FilePath.Glob as Glob ( match, compile )
+import           System.IO ( stderr )
+import           System.IO.Storage ( withStore, putValue, getValue )
+import           System.Locale ( defaultTimeLocale )
+import           System.Log.Formatter ( tfLogFormatter )
+import           System.Log.Handler ( setFormatter )
+import           System.Log.Handler.Simple ( streamHandler )
 import           System.Log.Logger
-import           Text.Printf
-import           Text.Regex.Posix
+import           Text.Printf ( printf )
+import           Text.Regex.Posix ( (=~) )
 
 default (Integer, Text)
 
@@ -128,7 +127,7 @@ data Fileset = Fileset { _filesetName          :: Text
 
 makeLenses ''Fileset
 
-$(deriveJSON (L.drop 8) ''Fileset)
+$(deriveJSON (drop 8) ''Fileset)
 
 -- | A 'Container' is a physical grouping of files, reflecting an instance of
 --   a 'Fileset' somewhere on a storage medium.  For every 'Fileset', there
@@ -146,7 +145,7 @@ data Container = Container { _containerFileset  :: Text
 
 makeLenses ''Container
 
-$(deriveJSON (L.drop 10) ''Container)
+$(deriveJSON (drop 10) ''Container)
 
 instance NFData Container where
   rnf a = a `seq` ()
@@ -171,7 +170,7 @@ data Store = Store { _storeName     :: Text
 
 makeLenses ''Store
 
-$(deriveJSON (L.drop 6) ''Store)
+$(deriveJSON (drop 6) ''Store)
 
 instance NFData Store where
   rnf a = a `seq` ()
@@ -197,7 +196,7 @@ instance Exception PushmeException
 main :: IO ()
 main = do
   mainArgs <- getArgs
-  opts     <- withArgs (if L.null mainArgs then [] else mainArgs)
+  opts     <- withArgs (if null mainArgs then [] else mainArgs)
                        (cmdArgs pushmeOpts)
   procs    <- GHC.Conc.getNumProcessors
   _        <- GHC.Conc.setNumCapabilities $
@@ -254,16 +253,16 @@ pushmeCommand opts sts fsets cts
     let fss    = fromString $ filesets opts
         cls    = fromString $ classes opts
         sorted =
-          L.sortBy (compare `on` (^._2.filesetPriority)) $
-          L.filter
+          sortBy (compare `on` (^._2.filesetPriority)) $
+          filter
             (\(_, fs) ->
                 (T.null fss || matchText fss (fs^.filesetName))
               && (T.null cls || matchText cls (fs^.filesetClass))) $
-          L.map (\x -> (x, findFileset (x^.containerFileset) fsets)) $
+          map (\x -> (x, findFileset (x^.containerFileset) fsets)) $
           case arguments opts of
             [] -> cts
-            xs -> L.nub $ mconcat $ L.map (\st -> containersForStore st cts) $
-                 L.map (\n -> findStore (fromString n) sts) xs
+            xs -> nub $ mconcat $ map (\st -> containersForStore st cts) $
+                 map (\n -> findStore (fromString n) sts) xs
 
     in for_ sorted $ \(ct, _) ->
          putStrLn $
@@ -281,7 +280,7 @@ pushmeCommand opts sts fsets cts
     shelly $ debugL $ here <> " -> " <> fromString (show this)
 
     cts' <-
-      L.foldl'
+      foldl'
         (\acc host -> do
             innerCts   <- acc
             updatedCts <- shelly $
@@ -292,7 +291,7 @@ pushmeCommand opts sts fsets cts
             -- fully up-to-date master list.  We can't do it "as we go"
             -- because of the parallel processing.
             return $
-              L.map (\ct -> L.foldl' mergeContainers ct updatedCts) innerCts)
+              map (\ct -> foldl' mergeContainers ct updatedCts) innerCts)
         (return cts) (arguments opts)
 
     unless (dryRun opts || noSync opts) $
@@ -310,13 +309,13 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
                (containersForStore that conts)
     sorted   <- filterAndSortBindings bindings
     mconcat <$>
-      (sequence $ flip L.map sorted $ \bnd -> do
+      (sequence $ flip map sorted $ \bnd -> do
           let info = bnd^.bindingThat
           createSnapshot (storeIsLocal here (info^.infoStore)) info)
 
   | otherwise = do
     let (self@(_, this), there) =
-          if "/" `isInfixOf` thereRaw
+          if "/" `T.isInfixOf` thereRaw
           then let [b, e] = T.splitOn "/" thereRaw
                in ((b, findStore b sts), e)
           else (defaultSelf, thereRaw)
@@ -328,7 +327,7 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
     noticeL $ format "Synchronizing {} -> {}"
                      [this^.storeName , that^.storeName]
 
-    case L.lookup (that^.storeName) (this^.storeTargets) of
+    case lookup (that^.storeName) (this^.storeTargets) of
       Nothing -> warningL "Nothing to do" >> return []
 
       Just xs -> do
@@ -341,7 +340,7 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
                                (bnd^.bindingThis.infoContainer)
         updatedContainers <-
           liftIO $ parallel $
-            L.map (shelly . syncContainers) sortedMappings
+            map (shelly . syncContainers) sortedMappings
 
         return $ mconcat updatedContainers
 
@@ -351,8 +350,8 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
       cls <- fromString <$> getOption classes
 
       return $
-        L.sortBy (compare `on` (^.bindingFileset.filesetPriority)) $
-        L.filter
+        sortBy (compare `on` (^.bindingFileset.filesetPriority)) $
+        filter
           (\x -> (T.null fss ||
                   matchText fss (x^.bindingFileset.filesetName))
                  && (T.null cls ||
@@ -412,7 +411,7 @@ reportMissingFiles :: Text -> Container -> Sh ()
 reportMissingFiles label cont = do
   (Pathname contPath) <- liftIO $ getPathname (cont^.containerPath)
 
-  files    <- L.map (T.drop (T.length (toTextIgnore contPath))
+  files    <- map (T.drop (T.length (toTextIgnore contPath))
                      . toTextIgnore)
               <$> ls contPath
   optsFile <- liftIO $ getHomePath (".pushme/filters/"
@@ -421,21 +420,21 @@ reportMissingFiles label cont = do
 
   when exists $ do
     optsText <- readfile optsFile
-    let stringify    = (\x -> if L.head x == '/' then L.tail x else x)
-                       . (\x -> if x !! (L.length x - 1) == '/'
-                                then L.init x else x)
+    let stringify    = (\x -> if head x == '/' then tail x else x)
+                       . (\x -> if x !! (length x - 1) == '/'
+                                then init x else x)
                        . T.unpack . T.drop 2
-        patterns     = L.map Glob.compile
-                       . L.filter (`notElem` ["*", "*/", ".*", ".*/"])
-                       . L.map stringify . T.lines $ optsText
+        patterns     = map Glob.compile
+                       . filter (`notElem` ["*", "*/", ".*", ".*/"])
+                       . map stringify . T.lines $ optsText
         patMatch f p = Glob.match p f
         files'       =
-          L.foldl' (\acc x ->
-                     if L.any (patMatch x) patterns
+          foldl' (\acc x ->
+                     if any (patMatch x) patterns
                      then acc
                      else x:acc) []
-                   (L.map toString
-                    . L.filter (`notElem` [ ".DS_Store", ".localized" ])
+                   (map toString
+                    . filter (`notElem` [ ".DS_Store", ".localized" ])
                     $ files)
 
     for_ files' $ \f ->
@@ -445,7 +444,7 @@ createBinding :: (Text, Store) -> (Text, Store) -> [Fileset] -> [Container]
               -> Text -> Sh Binding
 createBinding (here,this) (there,that) fsets conts n = do
   let bnd =
-        case L.find (\x -> x^.filesetName == n) fsets of
+        case find (\x -> x^.filesetName == n) fsets of
           Nothing ->
             error $ toString  $ "Could not find fileset: " <> n
           Just fs ->
@@ -462,11 +461,16 @@ createBinding (here,this) (there,that) fsets conts n = do
   load <- getOption loadRevs
   if load
     then do
-      thisContRev <- containerRev (bnd^.bindingThis)
-      thatContRev <- containerRev (bnd^.bindingThat)
-      let l = infoContainer.containerLastRev
-      return $ bindingThis.l .~ (D.trace ("thisContRev:" ++ show thisContRev) thisContRev)
-             $ bindingThat.l .~ (D.trace ("thatContRev:" ++ show thatContRev) thatContRev) $ bnd
+      let l = infoContainer.containerLastRev -- this one is a mutator
+          m = infoContainer.containerLastRev -- this one is an accessor
+      thisContRev <- if isZfs (bnd^.bindingThis)
+                    then containerRev (bnd^.bindingThis)
+                    else return $ bnd^.bindingThis.m
+      thatContRev <- if isZfs (bnd^.bindingThat)
+                    then containerRev (bnd^.bindingThat)
+                    else return $ bnd^.bindingThat.m
+      return $ bindingThis.l .~ thisContRev
+             $ bindingThat.l .~ thatContRev $ bnd
     else return bnd
 
   where
@@ -476,20 +480,20 @@ createBinding (here,this) (there,that) fsets conts n = do
           u  = info^.infoStore.storeUserName
           h  = info^.infoHostName
           hn = format "{}@{}" [u, h]
-      listing <- L.sort <$> L.map (read . toString) <$>
-                L.filter (T.all isDigit) <$> T.lines <$>
+      listing <- sort <$> map (read . toString) <$>
+                filter (T.all isDigit) <$> T.lines <$>
                 if storeIsLocal here (info^.infoStore)
                 then vrun "ls" ["-1", p']
                 else remote vrun hn ["ls", "-1", p']
-      if L.length listing == 0
+      if length listing == 0
         then return Nothing
-        else return . Just . L.last $ listing
+        else return . Just . last $ listing
 
 containersForStore :: Store -> [Container] -> [Container]
 containersForStore store conts =
-  L.filter (\x ->
+  filter (\x ->
              let stName = x^.containerStore
-                 names  = if "," `isInfixOf` stName
+                 names  = if "," `T.isInfixOf` stName
                           then T.splitOn "," stName
                           else [stName]
              in (store^.storeName) `elem` names) conts
@@ -500,7 +504,7 @@ findContainer fileset store conts =
     (error $ toString $
      format "Could not find container for Store {} + Fileset {}"
      [ store^.storeName, fileset^.filesetName ]) $
-    L.find (\x -> (x^.containerFileset) == (fileset^.filesetName))
+    find (\x -> (x^.containerFileset) == (fileset^.filesetName))
            (containersForStore store conts)
 
 mergeContainers :: Container -> Container -> Container
@@ -545,13 +549,13 @@ findFileset :: Text -> [Fileset] -> Fileset
 findFileset n fsets =
   fromMaybe
     (error $ toString $ "Could not find fileset matching name " <> n) $
-    L.find (\x -> n == x^.filesetName) fsets
+    find (\x -> n == x^.filesetName) fsets
 
 findStore :: Text -> [Store] -> Store
 findStore n sts =
   fromMaybe
     (error $ toString $ "Could not find store matching hostname " <> n) $
-    L.find (\x -> matchText (x^.storeHostRe) n) sts
+    find (\x -> matchText (x^.storeHostRe) n) sts
 
 storeIsLocal :: Text -> Store -> Bool
 storeIsLocal host st = matchText (st^.storeSelfRe) host
@@ -641,14 +645,14 @@ syncContainers bnd = errExit False $ do
   (sendCmd, recvCmd, updater) <- createSyncCommands bnd
 
   sendArgs <- sendCmd
-  unless (L.null sendArgs) $ do
-    noticeL $ intercalate " " sendArgs
+  unless (null sendArgs) $ do
+    noticeL $ T.intercalate " " sendArgs
     recvArgs <- recvCmd
-    if L.null recvArgs
-      then vrun_ (fromText (L.head sendArgs)) (L.tail sendArgs)
+    if null recvArgs
+      then vrun_ (fromText (head sendArgs)) (tail sendArgs)
       else escaping False $
-           vrun_ (fromText (L.head sendArgs)) $
-             L.tail sendArgs <> ["|"] <> (if verb
+           vrun_ (fromText (head sendArgs)) $
+             tail sendArgs <> ["|"] <> (if verb
                                           then ["pv", "|"]
                                           else [])
                              <> recvArgs
@@ -724,7 +728,7 @@ createSyncCommands bnd = do
                 [ T.pack (show l), T.pack (show r) ]
 
   where
-    escape x = if "\"" `isInfixOf` x || " " `isInfixOf` x
+    escape x = if "\"" `T.isInfixOf` x || " " `T.isInfixOf` x
                then "'" <> T.replace "\"" "\\\"" x <> "'"
                else x
 
@@ -775,7 +779,7 @@ volcopy label useSudo options src dest = do
   verb <- getOption verbose
 
   let shhh     = not deb && not verb
-      toRemote = ":" `isInfixOf` dest
+      toRemote = ":" `T.isInfixOf` dest
       options' =
         [ "-aHXEy"              -- jww (2012-09-23): maybe -A too?
         , "--fileflags"
@@ -819,9 +823,9 @@ volcopy label useSudo options src dest = do
       then silently $ do
         output <- doCopy (drun False) r toRemote useSudo options'
         let stats = M.fromList $
-                    L.map (liftM2 (,) L.head (L.head . T.words . L.last)
+                    map (liftM2 (,) head (head . T.words . last)
                            . T.splitOn ": ")
-                    . L.filter (": " `isInfixOf`)
+                    . filter (": " `T.isInfixOf`)
                     . T.lines $ output
             files = field "Number of files" stats
             sent  = field "Number of files transferred" stats
@@ -842,8 +846,8 @@ volcopy label useSudo options src dest = do
     commaSep :: Int -> Text
     commaSep = fst . T.foldr (\x (xs, num) ->
                                if num /= 0 && num `mod` 3 == 0
-                               then (x `cons` ',' `cons` xs, num + 1)
-                               else (x `cons` xs, num + 1))
+                               then (x `T.cons` ',' `T.cons` xs, num + 1)
+                               else (x `T.cons` xs, num + 1))
                              ("", 0)
                    . intToText
     field x stats = read (toString (stats M.! x)) :: Integer
@@ -890,7 +894,7 @@ intToText = fromString . show
 remote :: (FilePath -> [Text] -> Sh a) -> Text -> [Text] -> Sh a
 remote f host xs = do
   sshCmd <- getOption ssh
-  p <- if L.null sshCmd
+  p <- if null sshCmd
       then which "ssh"
       else return . Just . fromText . T.pack $ sshCmd
   case p of
@@ -900,7 +904,7 @@ remote f host xs = do
 asRoot :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
 asRoot f p xs =
   f "sudo" [ "su", "-", "root", "-c"
-           , T.unwords (L.map (\x -> "\"" <> x <> "\"") xs') ]
+           , T.unwords (map (\x -> "\"" <> x <> "\"") xs') ]
   where xs' = toTextIgnore p:xs
 
 sudo :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
