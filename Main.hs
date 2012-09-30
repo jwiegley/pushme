@@ -331,27 +331,22 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
       Nothing -> warningL "Nothing to do" >> return []
 
       Just xs -> do
-        bindings <-
-          traverse (createBinding self (there,that) fsets conts) xs
-        sortedMappings <- filterAndSortBindings bindings
-        for_ sortedMappings $ \bnd ->
+        bindings <- traverse (createBinding self (there,that) fsets conts) xs
+                    >>= filterAndSortBindings
+        for_ bindings $ \bnd ->
           when (bnd^.bindingFileset.filesetReportMissing) $
             reportMissingFiles (bnd^.bindingFileset.filesetName)
                                (bnd^.bindingThis.infoContainer)
-        updatedContainers <-
-          liftIO $ parallel $
-            map (shelly . syncContainers) sortedMappings
-
-        return $ mconcat updatedContainers
+        return . mconcat =<<
+          (liftIO . parallel . map (shelly . syncContainers) $ bindings)
 
   where
     filterAndSortBindings bindings = do
       fss <- fromString <$> getOption filesets
       cls <- fromString <$> getOption classes
-
-      return $
-        sortBy (compare `on` (^.bindingFileset.filesetPriority)) $
-        filter
+      return
+        $ sortBy (compare `on` (^.bindingFileset.filesetPriority))
+        $ filter
           (\x -> (T.null fss ||
                   matchText fss (x^.bindingFileset.filesetName))
                  && (T.null cls ||
