@@ -33,13 +33,13 @@ import           Data.Time.Format ( readTime, formatTime )
 import           Data.Time.LocalTime
 import           Data.Yaml ( encode, decode )
 import           Debug.Trace as D ()
+import qualified Distribution.PackageDescription.TH as Pkg
 import           Filesystem ( isFile, getHomeDirectory )
 import           GHC.Conc ( setNumCapabilities, getNumProcessors )
-import           Prelude hiding (FilePath, catch)
+import           Prelude hiding (FilePath)
 import           Shelly hiding (find)
 import           System.Console.CmdArgs
 import           System.Environment ( getArgs, withArgs )
-import qualified System.FilePath.Glob as Glob ( match, compile )
 import           System.IO ( stderr )
 import           System.IO.Storage ( withStore, putValue, getValue )
 import           System.Locale ( defaultTimeLocale )
@@ -66,7 +66,7 @@ instance ToJSON FilePath where
   toJSON = toJSON . toTextIgnore
 
 version :: String
-version = "0.1.0"
+version = $(Pkg.packageVariable (Pkg.pkgVersion . Pkg.package))
 
 copyright :: String
 copyright = "2012"
@@ -415,25 +415,27 @@ reportMissingFiles label cont = do
 
   when exists $ do
     optsText <- readfile optsFile
-    let stringify    = (\x -> if head x == '/' then tail x else x)
-                       . (\x -> if x !! (length x - 1) == '/'
-                                then init x else x)
-                       . T.unpack . T.drop 2
-        patterns     = map Glob.compile
+    let stringify    = (\x -> if T.head x == '/' then T.tail x else x)
+                       . (\x -> if T.index x (T.length x - 1) == '/'
+                                then T.init x else x)
+                       . T.drop 2
+        regexToGlob  = T.replace "].*" "]*"
+                       . T.replace "*" ".*"
+                       . T.replace "?" "."
+                       . T.replace "." "\\."
+        patterns     = map regexToGlob
                        . filter (`notElem` ["*", "*/", ".*", ".*/"])
                        . map stringify . T.lines $ optsText
-        patMatch f p = Glob.match p f
+        patMatch f p = (toString f) =~ (toString p)
         files'       =
           foldl' (\acc x ->
                      if any (patMatch x) patterns
                      then acc
                      else x:acc) []
-                   (map toString
-                    . filter (`notElem` [ ".DS_Store", ".localized" ])
-                    $ files)
+                 (filter (`notElem` [ ".DS_Store", ".localized" ]) files)
 
     for_ files' $ \f ->
-      warningL $ format "{}: unknown: \"{}\"" [label, fromString f]
+      warningL $ format "{}: unknown: \"{}\"" [label, f]
 
 createBinding :: (Text, Store) -> (Text, Store) -> [Fileset] -> [Container]
               -> Text -> Sh Binding
@@ -839,7 +841,7 @@ volcopy label useSudo options src dest = do
 
   where
     commaSep :: Int -> Text
-    commaSep = fst . T.foldr (\x (xs, num) ->
+    commaSep = fst . T.foldr (\x (xs, num :: Int) ->
                                if num /= 0 && num `mod` 3 == 0
                                then (x `T.cons` ',' `T.cons` xs, num + 1)
                                else (x `T.cons` xs, num + 1))
@@ -958,12 +960,18 @@ criticalL = liftIO . criticalM "pushme" . toString
 humanReadable :: Integer -> String
 humanReadable x
   | x < 1024   = printf "%db" x
-  | x < 1024^2 = printf "%.0fK" (fromIntegral x / (1024 :: Double))
-  | x < 1024^3 = printf "%.1fM" (fromIntegral x / (1024^2 :: Double))
-  | x < 1024^4 = printf "%.2fG" (fromIntegral x / (1024^3 :: Double))
-  | x < 1024^5 = printf "%.3fT" (fromIntegral x / (1024^4 :: Double))
-  | x < 1024^6 = printf "%.3fP" (fromIntegral x / (1024^5 :: Double))
-  | x < 1024^7 = printf "%.3fX" (fromIntegral x / (1024^6 :: Double))
+  | x < (1024^(2 :: Integer)) =
+    printf "%.0fK" (fromIntegral x / (1024 :: Double))
+  | x < (1024^(3 :: Integer)) =
+    printf "%.1fM" (fromIntegral x / (1024^(2 :: Integer) :: Double))
+  | x < (1024^(4 :: Integer)) =
+    printf "%.2fG" (fromIntegral x / (1024^(3 :: Integer) :: Double))
+  | x < (1024^(5 :: Integer)) =
+    printf "%.3fT" (fromIntegral x / (1024^(4 :: Integer) :: Double))
+  | x < (1024^(6 :: Integer)) =
+    printf "%.3fP" (fromIntegral x / (1024^(5 :: Integer) :: Double))
+  | x < (1024^(7 :: Integer)) =
+    printf "%.3fX" (fromIntegral x / (1024^(6 :: Integer) :: Double))
   | otherwise  = printf "%db" x
 
 -- Main.hs (pushme) ends here
