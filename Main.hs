@@ -139,6 +139,7 @@ data Container = Container { _containerFileset  :: Text
                            , _containerPath     :: FilePath
                            , _containerPoolPath :: Maybe FilePath
                            , _containerRecurse  :: Bool
+                           , _containerIsAnnex  :: Bool
                            , _containerLastRev  :: Maybe Int
                            , _containerLastSync :: Maybe LocalTime }
                deriving (Show, Eq)
@@ -155,17 +156,18 @@ instance NFData Container where
 --   container is done by copying over incremental snapshots.  Note that
 --   'storeHostName' refers to name used by SSH.
 
-data Store = Store { _storeName     :: Text
-                   , _storeHostRe   :: Text
-                   , _storeSelfRe   :: Text
-                   , _storeUserName :: Text
-                   , _storeZfsPool  :: Maybe Text
-                   , _storeZfsPath  :: Maybe FilePath
+data Store = Store { _storeName      :: Text
+                   , _storeHostRe    :: Text
+                   , _storeSelfRe    :: Text
+                   , _storeUserName  :: Text
+                   , _storeIsPrimary :: Bool
+                   , _storeZfsPool   :: Maybe Text
+                   , _storeZfsPath   :: Maybe FilePath
                    -- 'storeTargets' is a list of (StoreName, [FilesetName]),
                    -- where the containers involved are looked up from the
                    -- Container list by the Store/Fileset name pair for both
                    -- source and target.
-                   , _storeTargets  :: [(Text, [Text])] }
+                   , _storeTargets   :: [(Text, [Text])] }
            deriving (Show, Eq)
 
 makeLenses ''Store
@@ -396,7 +398,7 @@ createSnapshot local info
       else do
         let u = info^.infoStore.storeUserName
             h = info^.infoHostName
-        remote vrun_ (format "{}@{}" [u, h]) snapCmd
+        remote vrun_ u h snapCmd
 
     return [containerLastRev .~ Just nextRev $ cont]
 
@@ -476,12 +478,11 @@ createBinding (here,this) (there,that) fsets conts n = do
       let p' = toTextIgnore $ p </> fromText ".zfs" </> fromText "snapshot"
           u  = info^.infoStore.storeUserName
           h  = info^.infoHostName
-          hn = format "{}@{}" [u, h]
       listing <- sort <$> map (read . toString) <$>
                 filter (T.all isDigit) <$> T.lines <$>
                 if storeIsLocal here (info^.infoStore)
                 then vrun "ls" ["-1", p']
-                else remote vrun hn ["ls", "-1", p']
+                else remote vrun u h ["ls", "-1", p']
       if length listing == 0
         then return Nothing
         else return . Just . last $ listing
@@ -657,8 +658,9 @@ syncContainers bnd = errExit False $ do
 
 createSyncCommands :: Binding -> Sh (Sh [Text], Sh [Text], Sh [Container])
 createSyncCommands bnd = do
-  src <- liftIO $ sourcePath bnd
-  dst <- liftIO $ destinationPath bnd
+  src  <- liftIO $ sourcePath bnd
+  dst  <- liftIO $ destinationPath bnd
+  verb <- getOption verbose
 
   let thisCont    = bnd^.bindingThis.infoContainer
       thatCont    = bnd^.bindingThat.infoContainer
@@ -672,12 +674,48 @@ createSyncCommands bnd = do
              , return [] )
 
     (LocalPath (Pathname l), LocalPath (Pathname r)) ->
+      if thisCont^.containerIsAnnex && thatCont^.containerIsAnnex
+      then
+      return ( (if verb then id else silently) $
+               do chdir l $ vrun_ "git-annex" $ ["-q" | not verb]
+                    <> ["sync", bnd^.bindingThat.infoHostName]
+                  -- chdir r $ vrun_ "git-annex" $ ["-q" | not verb]
+                  --   <> ["sync", bnd^.bindingThis.infoHostName]
+                  chdir l $ vrun_ "git-annex" $ ["-q" | not verb]
+                    <> [ "--auto"
+                       | not (bnd^.bindingThat.infoStore.storeIsPrimary) ]
+                    <> [ "copy", "--to"
+                       , bnd^.bindingThat.infoHostName ]
+                  return []
+             , return []
+             , updateContainers Nothing bnd )
+      else
       return ( systemVolCopy (bnd^.bindingFileset.filesetName) l
                              (toTextIgnore r)
              , return []
              , updateContainers Nothing bnd )
 
     (LocalPath (Pathname l), RemotePath u h (Pathname r)) ->
+      if thisCont^.containerIsAnnex && thatCont^.containerIsAnnex
+      then
+      return ( escaping False $ (if verb then id else silently) $
+               do chdir l $ vrun_ "git-annex" $ ["-q" | not verb]
+                    <> ["sync", bnd^.bindingThat.infoHostName]
+                  chdir l $ vrun_ "git-annex" $ ["-q" | not verb]
+                    <> [ "--auto"
+                       | not (bnd^.bindingThat.infoStore.storeIsPrimary) ]
+                    <> [ "copy", "--to"
+                       , bnd^.bindingThat.infoHostName]
+                  -- remote vrun_ u h
+                  --   ["\"cd '" <> toTextIgnore r <> "'; git-annex "
+                  --    <> (if verb then "" else "-q") <> " sync "
+                  --    <> bnd^.bindingThis.infoHostName <> "\""]
+                  noticeL $ format "{}: Git Annex synchronized"
+                                   [(bnd^.bindingFileset.filesetName)]
+                  return []
+             , return []
+             , updateContainers Nothing bnd )
+      else
       return ( systemVolCopy (bnd^.bindingFileset.filesetName) l $
                              format "{}@{}:{}"
                                     [u, h, escape (toTextIgnore r)]
@@ -756,7 +794,7 @@ createSyncCommands bnd = do
                <> ["-F", pool]
 
     remoteReceive u h pool recurse =
-      remote (\x xs -> return (toTextIgnore x:xs)) (format "{}@{}" [u, h]) $
+      remote (\x xs -> return (toTextIgnore x:xs)) u h  $
              ["zfs", "recv"] <> ["-d" | recurse] <> ["-F", pool ]
 
 systemVolCopy :: Text -> FilePath -> Text -> Sh [Text]
@@ -770,10 +808,11 @@ volcopy :: Text -> Bool -> [Text] -> Text -> Text -> Sh [Text]
 volcopy label useSudo options src dest = do
   infoL $ format "{} → {}" [src, dest]
 
-  dry  <- getOption dryRun
-  noSy <- getOption noSync
-  deb  <- getOption debug
-  verb <- getOption verbose
+  dry    <- getOption dryRun
+  noSy   <- getOption noSync
+  deb    <- getOption debug
+  verb   <- getOption verbose
+  sshCmd <- getOption ssh
 
   let shhh     = not deb && not verb
       toRemote = ":" `T.isInfixOf` dest
@@ -801,6 +840,9 @@ volcopy label useSudo options src dest = do
         , "--filter=-p .AppleDesktop/"
         , "--filter=-p .com.apple.timemachine.supported" ]
 
+        <> (if not (null sshCmd)
+            then ["--rsh", fromString sshCmd]
+            else [])
         <> ["-n" | dry]
         <> (if shhh
             then ["--stats"]
@@ -888,15 +930,15 @@ matchText = flip ((=~) `on` toString)
 intToText :: Int -> Text
 intToText = fromString . show
 
-remote :: (FilePath -> [Text] -> Sh a) -> Text -> [Text] -> Sh a
-remote f host xs = do
+remote :: (FilePath -> [Text] -> Sh a) -> Text -> Text -> [Text] -> Sh a
+remote f user host xs = do
   sshCmd <- getOption ssh
   p <- if null sshCmd
       then which "ssh"
       else return . Just . fromText . T.pack $ sshCmd
   case p of
     Nothing -> error "Could not find ssh!"
-    Just r  -> f r (host:xs)
+    Just r  -> f r (format "{}@{}" [user, host]:xs)
 
 asRoot :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
 asRoot f p xs =
