@@ -21,7 +21,7 @@ import           Data.Foldable ( for_ )
 import           Data.Function ( on )
 import           Data.Function.Pointless ( (.:) )
 import           Data.List
-import qualified Data.Map as M ( fromList, (!) )
+import qualified Data.Map as M ( Map, fromList, lookup )
 import           Data.Maybe ( fromMaybe, isNothing, isJust, fromJust )
 import           Data.Monoid ( Monoid(mconcat), (<>) )
 import           Data.Stringable as S ( Stringable(fromString, toString) )
@@ -889,7 +889,9 @@ volcopy label useSudo options src dest = do
                                else (x `T.cons` xs, num + 1))
                              ("", 0)
                    . intToText
-    field x stats = read (toString (stats M.! x)) :: Integer
+
+    field :: Text -> M.Map Text Text -> Integer
+    field x stats = fromMaybe 0 $ read . toString <$> M.lookup x stats
 
     doCopy f rsync False False os = f rsync os
     doCopy f rsync False True os  = sudo f rsync os
@@ -934,11 +936,13 @@ remote :: (FilePath -> [Text] -> Sh a) -> Text -> Text -> [Text] -> Sh a
 remote f user host xs = do
   sshCmd <- getOption ssh
   p <- if null sshCmd
-      then which "ssh"
-      else return . Just . fromText . T.pack $ sshCmd
+      then do sshPath <- which "ssh"
+              return (toTextIgnore <$> sshPath)
+      else return . Just . T.pack $ sshCmd
   case p of
     Nothing -> error "Could not find ssh!"
-    Just r  -> f r (format "{}@{}" [user, host]:xs)
+    Just r  -> let ys = T.words r <> [format "{}@{}" [user, host]] <> xs
+               in f (fromText (head ys)) (tail ys)
 
 asRoot :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
 asRoot f p xs =
