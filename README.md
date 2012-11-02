@@ -16,6 +16,7 @@ Here is an example set of files for synchronizing my home directory and
       'SelfRe': '[Ff]oo'
       'ZfsPool': null
       'ZfsPath': null
+      'IsPrimary': true
     - 'Targets':
       - - 'foo'
         - - 'home'
@@ -26,6 +27,7 @@ Here is an example set of files for synchronizing my home directory and
       'SelfRe': '[Bb]ar'
       'ZfsPool': null
       'ZfsPath': null
+      'IsPrimary': false
 
 Then, `~/.pushme/filesets.yml`:
 
@@ -44,6 +46,7 @@ And finally, `~/.pushme/containers.yml`:
       'Recurse': false
       'Fileset': 'home'
       'PoolPath': null
+      'IsAnnex': false
       'LastRev': null
       'LastSync': null
       'Path': '~/'
@@ -51,6 +54,7 @@ And finally, `~/.pushme/containers.yml`:
       'Recurse': false
       'Fileset': 'local'
       'PoolPath': null
+      'IsAnnex': false
       'LastRev': null
       'LastSync': null
       'Path': '/usr/local/'
