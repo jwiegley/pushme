@@ -428,7 +428,7 @@ reportMissingFiles label cont = do
         patterns     = map regexToGlob
                        . filter (`notElem` ["*", "*/", ".*", ".*/"])
                        . map stringify . T.lines $ optsText
-        patMatch f p = (toString f) =~ (toString p)
+        patMatch f p = toString f =~ toString p
         files'       =
           foldl' (\acc x ->
                      if any (patMatch x) patterns
@@ -483,7 +483,7 @@ createBinding (here,this) (there,that) fsets conts n = do
                 if storeIsLocal here (info^.infoStore)
                 then vrun "ls" ["-1", p']
                 else remote vrun u h ["ls", "-1", p']
-      if length listing == 0
+      if null listing
         then return Nothing
         else return . Just . last $ listing
 
