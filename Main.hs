@@ -77,6 +77,7 @@ pushmeSummary = "pushme v" ++ version ++ ", (C) John Wiegley " ++ copyright
 data PushmeOpts = PushmeOpts { jobs      :: Int
                              , dryRun    :: Bool
                              , noSync    :: Bool
+                             , copyAll   :: Bool
                              , loadRevs  :: Bool
                              , stores    :: Bool
                              , ssh       :: String
@@ -96,6 +97,7 @@ pushmeOpts = PushmeOpts
                       &= help "Don't take any actions"
     , noSync    = def &= name "N"
                       &= help "Don't even attempt a dry-run sync"
+    , copyAll   = def &= help "For git-annex directories, copy all files"
     , loadRevs  = def &= name "L"
                       &= help "Load latest snapshot revs from disk"
     , stores    = def &= help "Show all the stores know to pushme"
@@ -212,6 +214,7 @@ testme = runPushme
          PushmeOpts { jobs      = 1
                     , dryRun    = True
                     , noSync    = True
+                    , copyAll   = False
                     , loadRevs  = True
                     , stores    = False
                     , ssh       = ""
@@ -658,9 +661,10 @@ syncContainers bnd = errExit False $ do
 
 createSyncCommands :: Binding -> Sh (Sh [Text], Sh [Text], Sh [Container])
 createSyncCommands bnd = do
-  src  <- liftIO $ sourcePath bnd
-  dst  <- liftIO $ destinationPath bnd
-  verb <- getOption verbose
+  src   <- liftIO $ sourcePath bnd
+  dst   <- liftIO $ destinationPath bnd
+  verb  <- getOption verbose
+  cpAll <- getOption copyAll
 
   let thisCont    = bnd^.bindingThis.infoContainer
       thatCont    = bnd^.bindingThat.infoContainer
@@ -676,17 +680,17 @@ createSyncCommands bnd = do
     (LocalPath (Pathname l), LocalPath (Pathname r)) ->
       if thisCont^.containerIsAnnex && thatCont^.containerIsAnnex
       then
-      return ( (if verb then id else silently) $
-               do chdir l $ vrun_ "git-annex" $ ["-q" | not verb]
-                    <> ["sync", bnd^.bindingThat.infoHostName]
-                  -- chdir r $ vrun_ "git-annex" $ ["-q" | not verb]
-                  --   <> ["sync", bnd^.bindingThis.infoHostName]
-                  chdir l $ vrun_ "git-annex" $ ["-q" | not verb]
-                    <> [ "--auto"
-                       | not (bnd^.bindingThat.infoStore.storeIsPrimary) ]
-                    <> [ "copy", "--to"
-                       , bnd^.bindingThat.infoHostName ]
-                  return []
+      return ( (if verb then id else silently) $ chdir l $ do
+                 vrun_ "git-annex" $ ["-q" | not verb] <> ["add", "."]
+                 vrun_ "git-annex" $ ["-q" | not verb]
+                       <> ["sync", bnd^.bindingThat.infoHostName]
+                 vrun_ "git-annex" $ ["-q" | not verb]
+                       <> [ "--auto"
+                          | not ((bnd^.bindingThat.infoStore.storeIsPrimary) ||
+                                 cpAll) ]
+                       <> [ "copy", "--to"
+                          , bnd^.bindingThat.infoHostName ]
+                 return []
              , return []
              , updateContainers Nothing bnd )
       else
@@ -699,20 +703,19 @@ createSyncCommands bnd = do
       if thisCont^.containerIsAnnex && thatCont^.containerIsAnnex
       then
       return ( escaping False $ (if verb then id else silently) $
-               do chdir l $ vrun_ "git-annex" $ ["-q" | not verb]
-                    <> ["sync", bnd^.bindingThat.infoHostName]
-                  chdir l $ vrun_ "git-annex" $ ["-q" | not verb]
-                    <> [ "--auto"
-                       | not (bnd^.bindingThat.infoStore.storeIsPrimary) ]
-                    <> [ "copy", "--to"
-                       , bnd^.bindingThat.infoHostName]
-                  -- remote vrun_ u h
-                  --   ["\"cd '" <> toTextIgnore r <> "'; git-annex "
-                  --    <> (if verb then "" else "-q") <> " sync "
-                  --    <> bnd^.bindingThis.infoHostName <> "\""]
-                  noticeL $ format "{}: Git Annex synchronized"
-                                   [(bnd^.bindingFileset.filesetName)]
-                  return []
+               chdir l $ do
+                 vrun_ "git-annex" $ ["-q" | not verb] <> ["add", "."]
+                 vrun_ "git-annex" $ ["-q" | not verb]
+                       <> ["sync", bnd^.bindingThat.infoHostName]
+                 vrun_ "git-annex" $ ["-q" | not verb]
+                       <> [ "--auto"
+                          | not ((bnd^.bindingThat.infoStore.storeIsPrimary)
+                                || cpAll) ]
+                       <> [ "copy", "--to"
+                          , bnd^.bindingThat.infoHostName]
+                 noticeL $ format "{}: Git Annex synchronized"
+                                  [ bnd^.bindingFileset.filesetName ]
+                 return []
              , return []
              , updateContainers Nothing bnd )
       else
