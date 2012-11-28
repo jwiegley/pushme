@@ -36,7 +36,7 @@ import           Debug.Trace as D ()
 import qualified Distribution.PackageDescription.TH as Pkg
 import           Filesystem ( isFile, getHomeDirectory )
 import           GHC.Conc ( setNumCapabilities, getNumProcessors )
-import           Prelude hiding (FilePath)
+import           Prelude hiding (FilePath, catch)
 import           Shelly hiding (find)
 import           System.Console.CmdArgs
 import           System.Environment ( getArgs, withArgs )
