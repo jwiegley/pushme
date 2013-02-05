@@ -11,7 +11,7 @@ module Main where
 import           Control.Concurrent.ParallelIO ( stopGlobalPool, parallel )
 import           Control.DeepSeq ( NFData(..) )
 import           Control.Exception ( SomeException, Exception, catch )
-import           Control.Lens hiding ( value )
+import           Control.Lens
 import           Control.Monad ( void, liftM2, (>=>) )
 import           Data.Aeson ( ToJSON(..), FromJSON(..) )
 import           Data.Aeson.TH ( deriveJSON )
@@ -266,8 +266,9 @@ pushmeCommand opts sts fsets cts
           map (\x -> (x, findFileset (x^.containerFileset) fsets)) $
           case arguments opts of
             [] -> cts
-            xs -> nub $ mconcat $ map (\st -> containersForStore st cts) $
-                 map (\n -> findStore (fromString n) sts) xs
+            xs -> nub $ mconcat $
+                 map (\n -> containersForStore (findStore (fromString n) sts)
+                                              cts) xs
 
     in for_ sorted $ \(ct, _) ->
          putStrLn $
@@ -329,10 +330,10 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
     debugL $ (this^.storeHostRe) <> " -> " <> fromString (show this)
     debugL $ there <> " -> " <> fromString (show that)
 
-    noticeL $ format "Synchronizing {} -> {}"
+    noticeL $ format "\ESC[31mSynchronizing {} -> {}\ESC[0m"
                      [this^.storeName , that^.storeName]
 
-    case lookup (that^.storeName) (this^.storeTargets) of
+    xs <- case lookup (that^.storeName) (this^.storeTargets) of
       Nothing -> warningL "Nothing to do" >> return []
 
       Just xs -> do
@@ -344,6 +345,10 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
                                (bnd^.bindingThis.infoContainer)
         return . mconcat =<<
           (liftIO . parallel . map (shelly . syncContainers) $ bindings)
+
+    noticeL $ format "\ESC[32mDone synchronizing {} -> {}\ESC[0m"
+                     [this^.storeName , that^.storeName]
+    return xs
 
   where
     filterAndSortBindings bindings = do
@@ -491,13 +496,13 @@ createBinding (here,this) (there,that) fsets conts n = do
         else return . Just . last $ listing
 
 containersForStore :: Store -> [Container] -> [Container]
-containersForStore store conts =
+containersForStore store =
   filter (\x ->
              let stName = x^.containerStore
                  names  = if "," `T.isInfixOf` stName
                           then T.splitOn "," stName
                           else [stName]
-             in (store^.storeName) `elem` names) conts
+             in (store^.storeName) `elem` names)
 
 findContainer :: Fileset -> Store -> [Container] -> Container
 findContainer fileset store conts =
@@ -601,9 +606,9 @@ sourcePath bnd
     let poolPath = toTextIgnore $ zfsPoolPath this
     in case (thisCont^.containerLastRev, thatCont^.containerLastRev) of
          (Just thisRev, Just thatRev) ->
-           if thisRev > thatRev
-           then return $ LocalPath $ ZfsSnapshotRange poolPath thatRev thisRev
-           else return $ LocalPath NoPath
+           return $ LocalPath $ if thisRev > thatRev
+                                then ZfsSnapshotRange poolPath thatRev thisRev
+                                else NoPath
          (Just thisRev, Nothing) ->
            return $ LocalPath $ ZfsSnapshot poolPath thisRev
          (Nothing, _) ->
@@ -652,11 +657,7 @@ syncContainers bnd = errExit False $ do
     if null recvArgs
       then vrun_ (fromText (head sendArgs)) (tail sendArgs)
       else escaping False $
-           vrun_ (fromText (head sendArgs)) $
-             tail sendArgs <> ["|"] <> (if verb
-                                          then ["pv", "|"]
-                                          else [])
-                             <> recvArgs
+           vrun_ (fromText (head sendArgs)) $ tail sendArgs <> ["|"] <> recvArgs
   updater
 
 createSyncCommands :: Binding -> Sh (Sh [Text], Sh [Text], Sh [Container])
@@ -688,14 +689,16 @@ createSyncCommands bnd = do
                        <> [ "--auto"
                           | not ((bnd^.bindingThat.infoStore.storeIsPrimary) ||
                                  cpAll) ]
-                       <> [ "copy", "--to"
-                          , bnd^.bindingThat.infoHostName ]
+                       <> [ "copy",
+                          , "--not", "--in", bnd^.bindingThat.infoHostName
+                          , "--to", bnd^.bindingThat.infoHostName ]
                  return []
              , return []
              , updateContainers Nothing bnd )
       else
-      return ( systemVolCopy (bnd^.bindingFileset.filesetName) l
-                             (toTextIgnore r)
+      return ( systemVolCopy
+                 ((bnd^.bindingThat.infoStore.storeUserName) /= "root")
+                 (bnd^.bindingFileset.filesetName) l (toTextIgnore r)
              , return []
              , updateContainers Nothing bnd )
 
@@ -711,17 +714,19 @@ createSyncCommands bnd = do
                        <> [ "--auto"
                           | not ((bnd^.bindingThat.infoStore.storeIsPrimary)
                                 || cpAll) ]
-                       <> [ "copy", "--to"
-                          , bnd^.bindingThat.infoHostName]
+                       <> [ "copy"
+                          , "--not", "--in", bnd^.bindingThat.infoHostName
+                          , "--to", bnd^.bindingThat.infoHostName ]
                  noticeL $ format "{}: Git Annex synchronized"
                                   [ bnd^.bindingFileset.filesetName ]
                  return []
              , return []
              , updateContainers Nothing bnd )
       else
-      return ( systemVolCopy (bnd^.bindingFileset.filesetName) l $
-                             format "{}@{}:{}"
-                                    [u, h, escape (toTextIgnore r)]
+      return ( systemVolCopy
+                 ((bnd^.bindingThat.infoStore.storeUserName) /= "root")
+                 (bnd^.bindingFileset.filesetName) l
+                 (format "{}@{}:{}" [u, h, escape (toTextIgnore r)])
              , return []
              , updateContainers Nothing bnd )
 
@@ -800,12 +805,12 @@ createSyncCommands bnd = do
       remote (\x xs -> return (toTextIgnore x:xs)) u h  $
              ["zfs", "recv"] <> ["-d" | recurse] <> ["-F", pool ]
 
-systemVolCopy :: Text -> FilePath -> Text -> Sh [Text]
-systemVolCopy label src dest = do
+systemVolCopy :: Bool -> Text -> FilePath -> Text -> Sh [Text]
+systemVolCopy useSudo label src dest = do
   optsFile <- liftIO $ getHomePath (".pushme/filters/" <> label)
   exists   <- liftIO $ isFile optsFile
   let rsyncOptions = ["--include-from=" <> toTextIgnore optsFile | exists]
-  volcopy label True rsyncOptions (toTextIgnore src) dest
+  volcopy label useSudo rsyncOptions (toTextIgnore src) dest
 
 volcopy :: Text -> Bool -> [Text] -> Text -> Text -> Sh [Text]
 volcopy label useSudo options src dest = do
@@ -820,8 +825,8 @@ volcopy label useSudo options src dest = do
   let shhh     = not deb && not verb
       toRemote = ":" `T.isInfixOf` dest
       options' =
-        [ "-aHXEy"              -- jww (2012-09-23): maybe -A too?
-        , "--fileflags"
+        [ "-aHEy"               -- jww (2012-09-23): maybe -A too?
+        -- , "--fileflags"
         , "--delete-after"
         , "--ignore-errors"
         , "--force-delete"
@@ -873,12 +878,13 @@ volcopy label useSudo options src dest = do
             sent  = field "Number of files transferred" stats
             total = field "Total file size" stats
             xfer  = field "Total transferred file size" stats
-        noticeL $ format "{}: Sent {} in {} files (out of {} in {})"
-                         [ label
-                         , fromString (humanReadable xfer),
-                           commaSep (fromIntegral sent)
-                         , fromString (humanReadable total),
-                           commaSep (fromIntegral files) ]
+        noticeL $ format
+            "{}: \ESC[34mSent \ESC[35m{}\ESC[0m\ESC[34m in {} files\ESC[0m (out of {} in {})"
+            [ label
+            , fromString (humanReadable xfer),
+              commaSep (fromIntegral sent)
+            , fromString (humanReadable total),
+              commaSep (fromIntegral files) ]
       else
         doCopy (drun_ False) r toRemote useSudo options'
 
@@ -898,10 +904,12 @@ volcopy label useSudo options src dest = do
 
     doCopy f rsync False False os = f rsync os
     doCopy f rsync False True os  = sudo f rsync os
-    doCopy f rsync True False os  = f rsync (remoteRsync rsync:os)
-    doCopy f rsync True True os   = asRoot f rsync (remoteRsync rsync:os)
+    doCopy f rsync True False os  = f rsync (remoteRsync False rsync:os)
+    doCopy f rsync True True os   = asRoot f rsync (remoteRsync True rsync:os)
 
-    remoteRsync x = format "--rsync-path=sudo {}" [toTextIgnore x]
+    remoteRsync useSudo' x = if useSudo'
+                             then format "--rsync-path=sudo {}" [toTextIgnore x]
+                             else format "--rsync-path={}" [toTextIgnore x]
 
 readDataFile :: FromJSON a => Text -> IO [a]
 readDataFile p = do
