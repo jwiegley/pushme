@@ -690,7 +690,11 @@ createSyncCommands bnd = do
                           | not ((bnd^.bindingThat.infoStore.storeIsPrimary) ||
                                  cpAll) ]
                        <> [ "copy",
+                          , "-("
                           , "--not", "--in", bnd^.bindingThat.infoHostName
+                          , "--and"
+                          , "--not", "--in", "web"
+                          , "-)
                           , "--to", bnd^.bindingThat.infoHostName ]
                  return []
              , return []
@@ -715,7 +719,11 @@ createSyncCommands bnd = do
                           | not ((bnd^.bindingThat.infoStore.storeIsPrimary)
                                 || cpAll) ]
                        <> [ "copy"
+                          , "-("
                           , "--not", "--in", bnd^.bindingThat.infoHostName
+                          , "--and"
+                          , "--not", "--in", "web"
+                          , "-)
                           , "--to", bnd^.bindingThat.infoHostName ]
                  noticeL $ format "{}: Git Annex synchronized"
                                   [ bnd^.bindingFileset.filesetName ]
