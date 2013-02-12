@@ -689,7 +689,7 @@ createSyncCommands bnd = do
                        <> [ "--auto"
                           | not ((bnd^.bindingThat.infoStore.storeIsPrimary) ||
                                  cpAll) ]
-                       <> [ "copy",
+                       <> [ "copy"
                           , "-("
                           , "--not", "--in", bnd^.bindingThat.infoHostName
                           , "--and"
