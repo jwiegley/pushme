@@ -17,6 +17,7 @@ import           Data.Aeson ( ToJSON(..), FromJSON(..) )
 import           Data.Aeson.TH ( deriveJSON )
 import qualified Data.ByteString.Char8 as BC ( writeFile, readFile )
 import           Data.Char ( isDigit )
+import           Data.Data ( Data )
 import           Data.Foldable ( for_ )
 import           Data.Function ( on )
 import           Data.Function.Pointless ( (.:) )
@@ -31,14 +32,13 @@ import qualified Data.Text.Lazy as T
 import           Data.Time.Clock ( getCurrentTime )
 import           Data.Time.Format ( readTime, formatTime )
 import           Data.Time.LocalTime
+import           Data.Typeable ( Typeable )
 import           Data.Yaml ( encode, decode )
-import           Debug.Trace as D ()
-import qualified Distribution.PackageDescription.TH as Pkg
 import           Filesystem ( isFile, getHomeDirectory )
 import           GHC.Conc ( setNumCapabilities, getNumProcessors )
+import           Options.Applicative
 import           Prelude hiding (FilePath, catch)
 import           Shelly hiding (find)
-import           System.Console.CmdArgs
 import           System.Environment ( getArgs, withArgs )
 import           System.IO ( stderr )
 import           System.IO.Storage ( withStore, putValue, getValue )
@@ -66,7 +66,7 @@ instance ToJSON FilePath where
   toJSON = toJSON . toTextIgnore
 
 version :: String
-version = $(Pkg.packageVariable (Pkg.pkgVersion . Pkg.package))
+version = "1.2.0"
 
 copyright :: String
 copyright = "2012"
@@ -74,58 +74,56 @@ copyright = "2012"
 pushmeSummary :: String
 pushmeSummary = "pushme v" ++ version ++ ", (C) John Wiegley " ++ copyright
 
-data PushmeOpts = PushmeOpts { jobs      :: Int
-                             , dryRun    :: Bool
-                             , noSync    :: Bool
-                             , copyAll   :: Bool
-                             , loadRevs  :: Bool
-                             , stores    :: Bool
-                             , ssh       :: String
-                             , filesets  :: String
-                             , classes   :: String
-                             , verbose   :: Bool
-                             , quiet     :: Bool
-                             , debug     :: Bool
-                             , arguments :: [String] }
-               deriving (Data, Typeable, Show, Eq)
+data PushmeOpts = PushmeOpts
+    { jobs     :: Int
+    , dryRun   :: Bool
+    , noSync   :: Bool
+    , copyAll  :: Bool
+    , loadRevs :: Bool
+    , stores   :: Bool
+    , ssh      :: String
+    , filesets :: String
+    , classes  :: String
+    , verbose  :: Bool
+    , quiet    :: Bool
+    , debug    :: Bool
+    , cliArgs  :: [String]
+    } deriving (Data, Typeable, Show, Eq)
 
-pushmeOpts :: PushmeOpts
+pushmeOpts :: Parser PushmeOpts
 pushmeOpts = PushmeOpts
-    { jobs      = def &= name "j" &= typ "INT"
-                      &= help "Run INT concurrent finds at once (default: 2)"
-    , dryRun    = def &= name "n"
-                      &= help "Don't take any actions"
-    , noSync    = def &= name "N"
-                      &= help "Don't even attempt a dry-run sync"
-    , copyAll   = def &= help "For git-annex directories, copy all files"
-    , loadRevs  = def &= name "L"
-                      &= help "Load latest snapshot revs from disk"
-    , stores    = def &= help "Show all the stores know to pushme"
-    , ssh       = def &= help "Use a specific ssh command"
-    , filesets  = def &= name "f"
-                      &= help "Synchronize the given fileset(s) (comma-sep)"
-    , classes   = def &= name "c"
-                      &= help "Filesets classes to synchronize (comma-sep)"
-    , verbose   = def &= name "v"
-                      &= help "Report progress verbosely"
-    , quiet     = def &= name "q"
-                      &= help "Be a little quieter"
-    , debug     = def &= name "D"
-                      &= help "Report debug information"
-    , arguments = def &= args &= typ "ARGS..." }
-
-    &= summary pushmeSummary
-    &= program "pushme"
-    &= help "Synchronize data from one machine to another"
+    <$> option (short 'j' <> long "jobs" <> value 2 <>
+                help "Run INT concurrent finds at once (default: 2)")
+    <*> switch (short 'n' <> long "dry-run" <>
+                help "Don't take any actions")
+    <*> switch (short 'N' <> long "no-sync" <>
+                help "Don't even attempt a dry-run sync")
+    <*> switch (long "copy-all" <>
+                help "For git-annex directories, copy all files")
+    <*> switch (short 'L' <> long "load-revs" <>
+                help "Load latest snapshot revs from disk")
+    <*> switch (long "stores" <>
+                help "Show all the stores know to pushme")
+    <*> strOption (long "ssh" <> value "" <>
+                   help "Use a specific ssh command")
+    <*> strOption (short 'f' <> long "filesets" <> value "" <>
+                   help "Synchronize the given fileset(s) (comma-sep)")
+    <*> strOption (short 'c' <> long "classes" <> value "" <>
+                   help "Filesets classes to synchronize (comma-sep)")
+    <*> switch (short 'v' <> long "verbose" <> help "Report progress verbosely")
+    <*> switch (short 'q' <> long "quiet" <> help "Be a little quieter")
+    <*> switch (short 'D' <> long "debug" <> help "Report debug information")
+    <*> arguments Just (metavar "ARGS")
 
 -- | A 'Fileset' is a logical grouping of files, with an assigned class and
 --   priority.  It may also have an associated filter.
 
-data Fileset = Fileset { _filesetName          :: Text
-                       , _filesetClass         :: Text
-                       , _filesetPriority      :: Int
-                       , _filesetReportMissing :: Bool }
-               deriving (Show, Eq)
+data Fileset = Fileset
+    { _filesetName          :: Text
+    , _filesetClass         :: Text
+    , _filesetPriority      :: Int
+    , _filesetReportMissing :: Bool
+    } deriving (Show, Eq)
 
 makeLenses ''Fileset
 
@@ -136,15 +134,16 @@ $(deriveJSON (drop 8) ''Fileset)
 --   are many 'Container' instances.  When a fileset is synchronized, it means
 --   copying it by some means between different containers.
 
-data Container = Container { _containerFileset  :: Text
-                           , _containerStore    :: Text
-                           , _containerPath     :: FilePath
-                           , _containerPoolPath :: Maybe FilePath
-                           , _containerRecurse  :: Bool
-                           , _containerIsAnnex  :: Bool
-                           , _containerLastRev  :: Maybe Int
-                           , _containerLastSync :: Maybe LocalTime }
-               deriving (Show, Eq)
+data Container = Container
+    { _containerFileset  :: Text
+    , _containerStore    :: Text
+    , _containerPath     :: FilePath
+    , _containerPoolPath :: Maybe FilePath
+    , _containerRecurse  :: Bool
+    , _containerIsAnnex  :: Bool
+    , _containerLastRev  :: Maybe Int
+    , _containerLastSync :: Maybe LocalTime
+    } deriving (Show, Eq)
 
 makeLenses ''Container
 
@@ -158,19 +157,19 @@ instance NFData Container where
 --   container is done by copying over incremental snapshots.  Note that
 --   'storeHostName' refers to name used by SSH.
 
-data Store = Store { _storeName      :: Text
-                   , _storeHostRe    :: Text
-                   , _storeSelfRe    :: Text
-                   , _storeUserName  :: Text
-                   , _storeIsPrimary :: Bool
-                   , _storeZfsPool   :: Maybe Text
-                   , _storeZfsPath   :: Maybe FilePath
-                   -- 'storeTargets' is a list of (StoreName, [FilesetName]),
-                   -- where the containers involved are looked up from the
-                   -- Container list by the Store/Fileset name pair for both
-                   -- source and target.
-                   , _storeTargets   :: [(Text, [Text])] }
-           deriving (Show, Eq)
+data Store = Store
+    { _storeName      :: Text
+    , _storeHostRe    :: Text
+    , _storeSelfRe    :: Text
+    , _storeUserName  :: Text
+    , _storeIsPrimary :: Bool
+    , _storeZfsPool   :: Maybe Text
+    , _storeZfsPath   :: Maybe FilePath
+    -- 'storeTargets' is a list of (StoreName, [FilesetName]), where the
+    -- containers involved are looked up from the Container list by the
+    -- Store/Fileset name pair for both source and target.
+    , _storeTargets   :: [(Text, [Text])]
+    } deriving (Show, Eq)
 
 makeLenses ''Store
 
@@ -179,17 +178,19 @@ $(deriveJSON (drop 6) ''Store)
 instance NFData Store where
   rnf a = a `seq` ()
 
-data Info = Info { _infoHostName  :: Text
-                 , _infoStore     :: Store
-                 , _infoContainer :: Container }
-          deriving (Show, Eq)
+data Info = Info
+    { _infoHostName  :: Text
+    , _infoStore     :: Store
+    , _infoContainer :: Container
+    } deriving (Show, Eq)
 
 makeLenses ''Info
 
-data Binding = Binding { _bindingThis    :: Info
-                       , _bindingThat    :: Info
-                       , _bindingFileset :: Fileset }
-             deriving (Show, Eq)
+data Binding = Binding
+    { _bindingThis    :: Info
+    , _bindingThat    :: Info
+    , _bindingFileset :: Fileset
+    } deriving (Show, Eq)
 
 makeLenses ''Binding
 
@@ -198,32 +199,33 @@ data PushmeException = PushmeException deriving (Show, Typeable)
 instance Exception PushmeException
 
 main :: IO ()
-main = do
-  mainArgs <- getArgs
-  opts     <- withArgs (if null mainArgs then [] else mainArgs)
-                       (cmdArgs pushmeOpts)
-  procs    <- GHC.Conc.getNumProcessors
-  _        <- GHC.Conc.setNumCapabilities $
-              case jobs opts of 0 -> min procs 1; x -> x
+main = execParser opts >>= \o -> do
+    procs    <- GHC.Conc.getNumProcessors
+    _        <- GHC.Conc.setNumCapabilities $
+                case jobs o of 0 -> min procs 1; x -> x
 
-  runPushme opts `catch` \(_ :: PushmeException) -> return ()
-                 `catch` \(ex :: SomeException)  -> error (show ex)
+    runPushme o `catch` \(_ :: PushmeException) -> return ()
+                `catch` \(ex :: SomeException)  -> error (show ex)
+  where
+    opts = info (helper <*> pushmeOpts)
+                (fullDesc <> progDesc "" <> header pushmeSummary)
 
 testme :: IO ()
-testme = runPushme
-         PushmeOpts { jobs      = 1
-                    , dryRun    = True
-                    , noSync    = True
-                    , copyAll   = False
-                    , loadRevs  = True
-                    , stores    = False
-                    , ssh       = ""
-                    , filesets  = ""
-                    , classes   = ""
-                    , verbose   = True
-                    , quiet     = False
-                    , debug     = True
-                    , arguments = ["@data", "data/titan"] }
+testme = runPushme PushmeOpts
+             { jobs     = 1
+             , dryRun   = True
+             , noSync   = True
+             , copyAll  = False
+             , loadRevs = True
+             , stores   = False
+             , ssh      = ""
+             , filesets = ""
+             , classes  = ""
+             , verbose  = True
+             , quiet    = False
+             , debug    = True
+             , cliArgs  = ["@data", "data/titan"]
+             }
 
 runPushme :: PushmeOpts -> IO ()
 runPushme opts = do
@@ -264,7 +266,7 @@ pushmeCommand opts sts fsets cts
                 (T.null fss || matchText fss (fs^.filesetName))
               && (T.null cls || matchText cls (fs^.filesetClass))) $
           map (\x -> (x, findFileset (x^.containerFileset) fsets)) $
-          case arguments opts of
+          case cliArgs opts of
             [] -> cts
             xs -> nub $ mconcat $
                  map (\n -> containersForStore (findStore (fromString n) sts)
@@ -298,7 +300,7 @@ pushmeCommand opts sts fsets cts
             -- because of the parallel processing.
             return $
               map (\ct -> foldl' mergeContainers ct updatedCts) innerCts)
-        (return cts) (arguments opts)
+        (return cts) (cliArgs opts)
 
     unless (dryRun opts || noSync opts) $
       writeDataFile ".pushme/containers.yml" cts'
@@ -690,11 +692,11 @@ createSyncCommands bnd = do
                           | not ((bnd^.bindingThat.infoStore.storeIsPrimary) ||
                                  cpAll) ]
                        <> [ "copy"
-                          , "-("
+                          , "-\\("
                           , "--not", "--in", bnd^.bindingThat.infoHostName
                           , "--and"
                           , "--not", "--in", "web"
-                          , "-)"
+                          , "-\\)"
                           , "--to", bnd^.bindingThat.infoHostName ]
                  return []
              , return []
@@ -719,11 +721,11 @@ createSyncCommands bnd = do
                           | not ((bnd^.bindingThat.infoStore.storeIsPrimary)
                                 || cpAll) ]
                        <> [ "copy"
-                          , "-("
+                          , "-\\("
                           , "--not", "--in", bnd^.bindingThat.infoHostName
                           , "--and"
                           , "--not", "--in", "web"
-                          , "-)"
+                          , "-\\)"
                           , "--to", bnd^.bindingThat.infoHostName ]
                  noticeL $ format "{}: Git Annex synchronized"
                                   [ bnd^.bindingFileset.filesetName ]
