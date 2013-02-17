@@ -66,10 +66,10 @@ instance ToJSON FilePath where
   toJSON = toJSON . toTextIgnore
 
 version :: String
-version = "1.2.0"
+version = "1.3.0"
 
 copyright :: String
-copyright = "2012"
+copyright = "2013"
 
 pushmeSummary :: String
 pushmeSummary = "pushme v" ++ version ++ ", (C) John Wiegley " ++ copyright
@@ -641,6 +641,7 @@ createSyncCommands bnd = do
   src   <- liftIO $ sourcePath bnd
   dst   <- liftIO $ destinationPath bnd
   verb  <- getOption verbose
+  deb   <- getOption debug
   cpAll <- getOption copyAll
 
   let thisCont    = bnd^.bindingThis.infoContainer
@@ -653,9 +654,9 @@ createSyncCommands bnd = do
                              (bnd^.bindingThis.infoStore.storeAnnexFlags)
 
       annexCmds isRemote path = do
-          vrun_ "git-annex" $ ["-q" | not verb] <> ["add", "."]
-          vrun_ "git-annex" $ ["-q" | not verb] <> ["sync"]
-          vrun_ "git-annex" $ ["-q" | not verb]
+          vrun_ "git-annex" $ ["-q" | not verb && not deb] <> ["add", "."]
+          vrun_ "git-annex" $ ["-q" | not verb && not deb] <> ["sync"]
+          vrun_ "git-annex" $ ["-q" | not verb && not deb]
                 <> [ "--auto"
                    | not ((bnd^.bindingThat.infoStore.storeIsPrimary)
                           || cpAll) ]
@@ -670,12 +671,13 @@ createSyncCommands bnd = do
               remote vrun_ u h
                   [ T.concat $
                     [ "\"cd '", toTextIgnore path, "'; git-annex" ]
-                    <> [" -q" | not verb]
+                    <> [" -q" | not verb && not deb]
                     <> [" sync", "\""] ]
 
               else sub $ do
                    cd path
-                   vrun_ "git-annex" $ [" -q" | not verb] <> [" sync"]
+                   vrun_ "git-annex" $ [" -q" | not verb && not deb]
+                                    <> [" sync"]
 
           noticeL $ format "{}: Git Annex synchronized"
                            [ bnd^.bindingFileset.filesetName ]

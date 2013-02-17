@@ -1,6 +1,6 @@
 Name: pushme
 
-Version:  1.2.0
+Version:  1.3.0
 Synopsis: Tool to synchronize multiple directories with rsync, zfs or git-annex
 
 Description: Script I use for synchronizing my data among machines.
