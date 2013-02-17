@@ -158,17 +158,19 @@ instance NFData Container where
 --   'storeHostName' refers to name used by SSH.
 
 data Store = Store
-    { _storeName      :: Text
-    , _storeHostRe    :: Text
-    , _storeSelfRe    :: Text
-    , _storeUserName  :: Text
-    , _storeIsPrimary :: Bool
-    , _storeZfsPool   :: Maybe Text
-    , _storeZfsPath   :: Maybe FilePath
+    { _storeName       :: Text
+    , _storeHostRe     :: Text
+    , _storeSelfRe     :: Text
+    , _storeUserName   :: Text
+    , _storeIsPrimary  :: Bool
+    , _storeZfsPool    :: Maybe Text
+    , _storeZfsPath    :: Maybe FilePath
     -- 'storeTargets' is a list of (StoreName, [FilesetName]), where the
     -- containers involved are looked up from the Container list by the
     -- Store/Fileset name pair for both source and target.
-    , _storeTargets   :: [(Text, [Text])]
+    , _storeTargets    :: [(Text, [Text])]
+    , _storeAnnexName  :: Text
+    , _storeAnnexFlags :: [(Text, [Text])]
     } deriving (Show, Eq)
 
 makeLenses ''Store
@@ -193,49 +195,23 @@ data Binding = Binding
     } deriving (Show, Eq)
 
 makeLenses ''Binding
-
-data PushmeException = PushmeException deriving (Show, Typeable)
-
-instance Exception PushmeException
 
 main :: IO ()
 main = execParser opts >>= \o -> do
-    procs    <- GHC.Conc.getNumProcessors
-    _        <- GHC.Conc.setNumCapabilities $
-                case jobs o of 0 -> min procs 1; x -> x
-
-    runPushme o `catch` \(_ :: PushmeException) -> return ()
-                `catch` \(ex :: SomeException)  -> error (show ex)
+    _ <- GHC.Conc.setNumCapabilities (jobs o)
+    runPushme o
+    stopGlobalPool
   where
     opts = info (helper <*> pushmeOpts)
                 (fullDesc <> progDesc "" <> header pushmeSummary)
 
-testme :: IO ()
-testme = runPushme PushmeOpts
-             { jobs     = 1
-             , dryRun   = True
-             , noSync   = True
-             , copyAll  = False
-             , loadRevs = True
-             , stores   = False
-             , ssh      = ""
-             , filesets = ""
-             , classes  = ""
-             , verbose  = True
-             , quiet    = False
-             , debug    = True
-             , cliArgs  = ["@data", "data/titan"]
-             }
-
 runPushme :: PushmeOpts -> IO ()
 runPushme opts = do
-  let level
-        | debug opts   = DEBUG
-        | verbose opts = INFO
-        | otherwise    = NOTICE
+  let level | debug opts   = DEBUG
+            | verbose opts = INFO
+            | otherwise    = NOTICE
   h <- (`setFormatter` tfLogFormatter "%H:%M:%S" "$time - [$prio] $msg")
        <$> streamHandler System.IO.stderr level
-
   removeAllHandlers
   updateGlobalLogger "pushme" (setLevel level)
   updateGlobalLogger "pushme" (addHandler h)
@@ -251,8 +227,6 @@ runPushme opts = do
     cts   <- readDataFile ".pushme/containers.yml" :: IO [Container]
 
     pushmeCommand opts sts fsets cts
-
-  stopGlobalPool
 
 pushmeCommand :: PushmeOpts -> [Store] -> [Fileset] -> [Container] -> IO ()
 pushmeCommand opts sts fsets cts
@@ -673,6 +647,38 @@ createSyncCommands bnd = do
       thatCont    = bnd^.bindingThat.infoContainer
       recurseThis = thisCont^.containerRecurse
       recurseThat = thatCont^.containerRecurse
+      annexFlags  = fromMaybe [ "--not", "--in"
+                              , bnd^.bindingThat.infoStore.storeAnnexName ]
+                    $ lookup (bnd^.bindingThat.infoStore.storeName)
+                             (bnd^.bindingThis.infoStore.storeAnnexFlags)
+
+      annexCmds isRemote path = do
+          vrun_ "git-annex" $ ["-q" | not verb] <> ["add", "."]
+          vrun_ "git-annex" $ ["-q" | not verb] <> ["sync"]
+          vrun_ "git-annex" $ ["-q" | not verb]
+                <> [ "--auto"
+                   | not ((bnd^.bindingThat.infoStore.storeIsPrimary)
+                          || cpAll) ]
+                <> [ "copy" ]
+                <> annexFlags
+                <> [ "--to", bnd^.bindingThat.infoStore.storeAnnexName ]
+
+          if isRemote
+              then sub $ do
+              let u = bnd^.bindingThat.infoStore.storeUserName
+                  h = bnd^.bindingThat.infoHostName
+              remote vrun_ u h
+                  [ T.concat $
+                    [ "\"cd '", toTextIgnore path, "'; git-annex" ]
+                    <> [" -q" | not verb]
+                    <> [" sync", "\""] ]
+
+              else sub $ do
+                   cd path
+                   vrun_ "git-annex" $ [" -q" | not verb] <> [" sync"]
+
+          noticeL $ format "{}: Git Annex synchronized"
+                           [ bnd^.bindingFileset.filesetName ]
 
   case (src, dst) of
     (LocalPath NoPath, _) ->
@@ -683,22 +689,8 @@ createSyncCommands bnd = do
     (LocalPath (Pathname l), LocalPath (Pathname r)) ->
       if thisCont^.containerIsAnnex && thatCont^.containerIsAnnex
       then
-      return ( (if verb then id else silently) $ chdir l $ do
-                 vrun_ "git-annex" $ ["-q" | not verb] <> ["add", "."]
-                 vrun_ "git-annex" $ ["-q" | not verb]
-                       <> ["sync", bnd^.bindingThat.infoHostName]
-                 vrun_ "git-annex" $ ["-q" | not verb]
-                       <> [ "--auto"
-                          | not ((bnd^.bindingThat.infoStore.storeIsPrimary) ||
-                                 cpAll) ]
-                       <> [ "copy"
-                          , "-\\("
-                          , "--not", "--in", bnd^.bindingThat.infoHostName
-                          , "--and"
-                          , "--not", "--in", "web"
-                          , "-\\)"
-                          , "--to", bnd^.bindingThat.infoHostName ]
-                 return []
+      return ( (if verb then id else silently) $ chdir l $
+                 annexCmds False r >> return []
              , return []
              , updateContainers Nothing bnd )
       else
@@ -712,24 +704,7 @@ createSyncCommands bnd = do
       if thisCont^.containerIsAnnex && thatCont^.containerIsAnnex
       then
       return ( escaping False $ (if verb then id else silently) $
-               chdir l $ do
-                 vrun_ "git-annex" $ ["-q" | not verb] <> ["add", "."]
-                 vrun_ "git-annex" $ ["-q" | not verb]
-                       <> ["sync", bnd^.bindingThat.infoHostName]
-                 vrun_ "git-annex" $ ["-q" | not verb]
-                       <> [ "--auto"
-                          | not ((bnd^.bindingThat.infoStore.storeIsPrimary)
-                                || cpAll) ]
-                       <> [ "copy"
-                          , "-\\("
-                          , "--not", "--in", bnd^.bindingThat.infoHostName
-                          , "--and"
-                          , "--not", "--in", "web"
-                          , "-\\)"
-                          , "--to", bnd^.bindingThat.infoHostName ]
-                 noticeL $ format "{}: Git Annex synchronized"
-                                  [ bnd^.bindingFileset.filesetName ]
-                 return []
+               chdir l $ annexCmds True r >> return []
              , return []
              , updateContainers Nothing bnd )
       else

@@ -6,58 +6,72 @@ Here is an example set of files for synchronizing my home directory and
 `/usr/local` via rsync between two machines: `foo` and `bar`.  First,
 `~/.pushme/stores.yml`:
 
-    - 'Targets':
-      - - 'bar'
-        - - 'home'
-          - 'local'
-      'HostRe': '[Ff]oo'
-      'Name': 'Foo'
-      'UserName': 'johnw'
-      'SelfRe': '[Ff]oo'
-      'ZfsPool': null
-      'ZfsPath': null
-      'IsPrimary': true
-    - 'Targets':
+    - Targets:
+      - - bar
+        - - home
+          - local
+      HostRe: [Ff]oo
+      Name: Foo
+      UserName: johnw
+      SelfRe: [Ff]oo
+      ZfsPool: null
+      ZfsPath: null
+      IsPrimary: true
+      AnnexName: foo
+      AnnexFlags: []
+    - Targets:
+      - - foo
+        - - home
+          - local
+      HostRe: [Bb]ar
+      Name: Bar
+      UserName: johnw
+      SelfRe: [Bb]ar
+      ZfsPool: null
+      ZfsPath: null
+      IsPrimary: false
+      AnnexName: bar
+      AnnexFlags:
       - - 'foo'
-        - - 'home'
-          - 'local'
-      'HostRe': '[Bb]ar'
-      'Name': 'Bar'
-      'UserName': 'johnw'
-      'SelfRe': '[Bb]ar'
-      'ZfsPool': null
-      'ZfsPath': null
-      'IsPrimary': false
+        - - '-\('
+          - '--not'
+          - '--in'
+          - 'foo'
+          - '--and'
+          - '--not'
+          - '--in'
+          - 'web'
+          - '-\)'
 
 Then, `~/.pushme/filesets.yml`:
 
-    - 'Priority': 60
-      'Name': 'home'
-      'Class': 'quick,main'
-      'ReportMissing': true
-    - 'Priority': 80
-      'Name': 'local'
-      'Class': 'system,main'
-      'ReportMissing': false
+    - Priority: 60
+      Name: home
+      Class: quick,main
+      ReportMissing: true
+    - Priority: 80
+      Name: local
+      Class: system,main
+      ReportMissing: false
 
 And finally, `~/.pushme/containers.yml`:
 
-    - 'Store': 'foo,bar'
-      'Recurse': false
-      'Fileset': 'home'
-      'PoolPath': null
-      'IsAnnex': false
-      'LastRev': null
-      'LastSync': null
-      'Path': '~/'
-    - 'Store': 'foo,bar'
-      'Recurse': false
-      'Fileset': 'local'
-      'PoolPath': null
-      'IsAnnex': false
-      'LastRev': null
-      'LastSync': null
-      'Path': '/usr/local/'
+    - Store: foo,bar
+      Recurse: false
+      Fileset: home
+      PoolPath: null
+      IsAnnex: false
+      LastRev: null
+      LastSync: null
+      Path: ~/
+    - Store: foo,bar
+      Recurse: false
+      Fileset: local
+      PoolPath: null
+      IsAnnex: false
+      LastRev: null
+      LastSync: null
+      Path: /usr/local/
 
 Now I can run the following command:
 
