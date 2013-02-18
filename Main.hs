@@ -170,7 +170,7 @@ data Store = Store
     -- Store/Fileset name pair for both source and target.
     , _storeTargets    :: [(Text, [Text])]
     , _storeAnnexName  :: Text
-    , _storeAnnexFlags :: [(Text, [Text])]
+    , _storeAnnexFlags :: [(Text, [(Text, [Text])])]
     } deriving (Show, Eq)
 
 makeLenses ''Store
@@ -650,8 +650,9 @@ createSyncCommands bnd = do
       recurseThat = thatCont^.containerRecurse
       annexFlags  = fromMaybe [ "--not", "--in"
                               , bnd^.bindingThat.infoStore.storeAnnexName ]
-                    $ lookup (bnd^.bindingThat.infoStore.storeName)
-                             (bnd^.bindingThis.infoStore.storeAnnexFlags)
+                    $ lookup (bnd^.bindingFileset.filesetName)
+                    =<< lookup (bnd^.bindingThat.infoStore.storeName)
+                               (bnd^.bindingThis.infoStore.storeAnnexFlags)
 
       annexCmds isRemote path = do
           vrun_ "git-annex" $ ["-q" | not verb && not deb] <> ["add", "."]
