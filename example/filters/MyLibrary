@@ -1,6 +1,7 @@
 - /Accounts/
 - /Address Book Plug-Ins/
 - /Application Support/
+- /Assistant/
 - /Assistants/
 + /Audio/
 - /Autosave Information/
@@ -23,6 +24,8 @@
 - /Cookies/
 - /Developer/
 + /DxO Optics Pro/
+- /EditMilestones/
+- /Facebook/
 - /Favorites/
 + /FontCollections/
 - /Fonts Disabled/
@@ -30,6 +33,7 @@
 - /Frameworks/
 - /GameKit/
 - /Google/
++ /GIMP/
 - /Icons/
 - /Images/
 + /Info/
@@ -40,7 +44,10 @@
 + /KeyBindings/
 + /Keyboard Layouts/
 - /Keychains/
-- /LaunchAgents/
++ /LaunchAgents/
+- /LaunchAgents/com.adobe*
+- /LaunchAgents/com.apple*
+- /LaunchAgents/homebrew.mxcl.jenkins.plist
 + /Lisp/
 - /Logs/
 + /MacPorts/
@@ -49,6 +56,7 @@
 + /Messages/
 - /Metadata/
 - /Mobile Documents/
++ /Mozilla/
 - /Opera/
 + /PDF Services/
 - /PhotoshopCrashes/
@@ -87,12 +95,15 @@
 - /Screen Savers/
 + /ScriptingAdditions/
 + /Scripts/
+- /Social/
 + /Sounds/
 + /Speech/
 + /Spelling/
 + /Spotlight/
 - /SyncedPreferences/
 + /TexPackages/
++ /Thunderbird/
+- /Twitter/
 - /Voices/
 - /WebKit/
 + /Widgets/
@@ -103,6 +114,7 @@
 - /iMovie/
 - /iTunes/
 + /openvpn/
++ /texlive/
 + /texmf/
 - /*
 - /*/

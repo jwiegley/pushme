@@ -1,4 +1,11 @@
 - *.dvdmedia/
+- *.part
+- *.part/
+- *.partial
+- *.partial/
+- *.download
+- *.download/
 - *.ripit/
 - Hermes*.dmg
 - Vulcan*.dmg
+- Nasim*.dmg

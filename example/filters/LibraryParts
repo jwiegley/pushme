@@ -1,0 +1,13 @@
++ /Python/
++ /Ruby/
++ /Perl/
++ /Caches/
++ /Caches/Homebrew/
+- /Caches/*
+- /Caches/*/
+- /Caches/.*
+- /Caches/.*/
+- /*
+- /*/
+- /.*
+- /.*/

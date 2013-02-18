@@ -17,14 +17,44 @@
   'ReportMissing': |-
     false
 - 'Priority': |-
+    165
+  'Name': 'Systems'
+  'Class': 'large,data,annex'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    500
+  'Name': 'Backups'
+  'Class': 'large,data,annex'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
     70
   'Name': 'Contracts'
-  'Class': 'large,data'
+  'Class': 'quick,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    70
+  'Name': 'TinyContracts'
+  'Class': 'quick,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    71
+  'Name': 'BoostPro'
+  'Class': 'quick,data'
   'ReportMissing': |-
     false
 - 'Priority': |-
     110
   'Name': 'Databases'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    110
+  'Name': 'TinyDatabases'
   'Class': 'large,data'
   'ReportMissing': |-
     false
@@ -41,6 +71,12 @@
   'ReportMissing': |-
     false
 - 'Priority': |-
+    10
+  'Name': 'TinyDocuments'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
     100
   'Name': 'Downloads'
   'Class': 'large,data'
@@ -49,6 +85,18 @@
 - 'Priority': |-
     30
   'Name': 'Library'
+  'Class': 'system'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    31
+  'Name': 'LibraryParts'
+  'Class': 'system'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    32
+  'Name': 'EtcParts'
   'Class': 'system'
   'ReportMissing': |-
     false
@@ -77,6 +125,12 @@
   'ReportMissing': |-
     false
 - 'Priority': |-
+    50
+  'Name': 'TinyMessages'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
     120
   'Name': 'Mirrors'
   'Class': 'large,data'
@@ -85,13 +139,19 @@
 - 'Priority': |-
     150
   'Name': 'Movies'
-  'Class': 'large,data'
+  'Class': 'large,data,annex'
   'ReportMissing': |-
     false
 - 'Priority': |-
     140
-  'Name': 'Music'
+  'Name': 'MyMusic'
   'Class': 'quick,main'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    142
+  'Name': 'Music'
+  'Class': 'large,data,annex'
   'ReportMissing': |-
     false
 - 'Priority': |-
@@ -113,6 +173,12 @@
   'ReportMissing': |-
     false
 - 'Priority': |-
+    20
+  'Name': 'TinyProjects'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
     60
   'Name': 'home'
   'Class': 'quick,main'
@@ -121,6 +187,24 @@
 - 'Priority': |-
     80
   'Name': 'local'
-  'Class': 'system,main'
+  'Class': 'quick,main'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    400
+  'Name': 'Machines'
+  'Class': 'large,data'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    500
+  'Name': 'Photos'
+  'Class': 'large,data,annex'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    900
+  'Name': 'Products'
+  'Class': 'large,data'
   'ReportMissing': |-
     false

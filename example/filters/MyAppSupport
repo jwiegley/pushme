@@ -6,6 +6,7 @@
 + /Aperture/
 + /AppFresh/
 + /Awaken/
++ /BibDesk/
 + /Bento/
 + /Blizzard/
 + /Boxer/
@@ -32,6 +33,7 @@
 + /Developer/
 + /Digiarty/
 - /Dock/
++ /Dropzone/
 + /DxO Optics Pro/
 + /EasyFind/
 + /ExpanDrive/
@@ -45,11 +47,14 @@
 + /Google Earth/
 + /Google/
 + /Growl/
++ /HandBrake/
++ /Hazel/
 - /Instruments/
 + /JNXLicenses/
 + /JollysFastVNC/
 + /Kindle/
 + /L8457789120
++ /LaTeXiT/
 + /LaunchBar/
 - /LaunchBar/Habits.plist
 - /Librarian/
@@ -67,18 +72,24 @@
 + /Mozilla/
 + /MrGeckosMedia/
 + /Mumble/
++ /MySQL/
 - /NVIDIA/
 + /NetNewsWire/
 - /NotificationCenter/
 + /Notify/
++ /OfficeTime/
 + /Omni Group/
 + /OmniGraffle/
 + /OmniOutliner 3/
 - /OpenMeta/
 - /Opera/
+- /Oracle/
++ /Path Finder/
 + /Phase One Media Pro/
 + /PhoneView/
 + /Platypus/
++ /Poedit/
++ /Postgres/
 + /Preview/
 + /QuickBooks/
 - /QuickBoot/
@@ -95,7 +106,10 @@
 - /SpiceRack/
 + /Steam/
 + /Stellarium/
++ /Sustainable Softworks/
 - /SyncServices/
+- /TechTool Pro 6/
++ /TeX Live Utility/
 + /TextExpander/
 + /TextMate/
 + /The Omni Group/
@@ -105,7 +119,7 @@
 + /TweetDeck/
 - /Ubiquity/
 + /VMware Fusion/
-+ /Virtual ][/
++ /Virtual []][[]/
 - /Wacom/
 + /Web Snapper/
 - /WhatSize/
@@ -113,6 +127,7 @@
 - /com.apple.QuickLook/
 - /com.apple.TCC/
 + /com.mactrackerapp.Mactracker/
++ /coq/
 + /eSellerate/
 + /ecto3/
 - /iCloud/
