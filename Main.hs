@@ -619,7 +619,7 @@ syncContainers :: Binding -> Sh [Container]
 syncContainers bnd = errExit False $ do
   verb  <- getOption verbose
 
-  noticeL $ format "Sending {}/{} → {}"
+  noticeL $ format "Sending {}/{} -> {}"
                    [ bnd^.bindingThis.infoStore.storeName
                    , bnd^.bindingFileset.filesetName
                    , bnd^.bindingThat.infoStore.storeName ]
@@ -802,7 +802,7 @@ systemVolCopy useSudo label src dest = do
 
 volcopy :: Text -> Bool -> [Text] -> Text -> Text -> Sh [Text]
 volcopy label useSudo options src dest = do
-  infoL $ format "{} → {}" [src, dest]
+  infoL $ format "{} -> {}" [src, dest]
 
   dry    <- getOption dryRun
   noSy   <- getOption noSync
