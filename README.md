@@ -33,16 +33,16 @@ Here is an example set of files for synchronizing my home directory and
       AnnexName: bar
       AnnexFlags:
       - - 'foo'
-        - - 'home'
-          - - '-\('
-            - '--not'
-            - '--in'
-            - 'foo'
-            - '--and'
-            - '--not'
-            - '--in'
-            - 'web'
-            - '-\)'
+        - - - 'home'
+            - - '-\('
+              - '--not'
+              - '--in'
+              - 'foo'
+              - '--and'
+              - '--not'
+              - '--in'
+              - 'web'
+              - '-\)'
 
 Then, `~/.pushme/filesets.yml`:
 
