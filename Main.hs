@@ -92,8 +92,8 @@ data PushmeOpts = PushmeOpts
 
 pushmeOpts :: Parser PushmeOpts
 pushmeOpts = PushmeOpts
-    <$> option (short 'j' <> long "jobs" <> value 2 <>
-                help "Run INT concurrent finds at once (default: 2)")
+    <$> option (short 'j' <> long "jobs" <> value 1 <>
+                help "Run INT concurrent finds at once (default: 1)")
     <*> switch (short 'n' <> long "dry-run" <>
                 help "Don't take any actions")
     <*> switch (short 'N' <> long "no-sync" <>
