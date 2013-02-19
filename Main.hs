@@ -644,15 +644,19 @@ createSyncCommands bnd = do
   deb   <- getOption debug
   cpAll <- getOption copyAll
 
-  let thisCont    = bnd^.bindingThis.infoContainer
-      thatCont    = bnd^.bindingThat.infoContainer
-      recurseThis = thisCont^.containerRecurse
-      recurseThat = thatCont^.containerRecurse
-      annexFlags  = fromMaybe [ "--not", "--in"
-                              , bnd^.bindingThat.infoStore.storeAnnexName ]
-                    $ lookup (bnd^.bindingFileset.filesetName)
-                    =<< lookup (bnd^.bindingThat.infoStore.storeName)
-                               (bnd^.bindingThis.infoStore.storeAnnexFlags)
+  let thisCont     = bnd^.bindingThis.infoContainer
+      thatCont     = bnd^.bindingThat.infoContainer
+      recurseThis  = thisCont^.containerRecurse
+      recurseThat  = thatCont^.containerRecurse
+
+      defaultFlags = [ "--not", "--in"
+                     , bnd^.bindingThat.infoStore.storeAnnexName ]
+      storeAFlags  = lookup (bnd^.bindingThat.infoStore.storeName)
+                            (bnd^.bindingThis.infoStore.storeAnnexFlags)
+      annexFlags   =
+          flip (maybe defaultFlags) storeAFlags $ \flags ->
+              fromMaybe (fromMaybe defaultFlags $ lookup "<default>" flags)
+                  $ lookup (bnd^.bindingFileset.filesetName) flags
 
       annexCmds isRemote path = do
           vrun_ "git-annex" $ ["-q" | not verb && not deb] <> ["add", "."]
