@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -25,10 +26,15 @@ import           Data.List
 import qualified Data.Map as M ( Map, fromList, lookup )
 import           Data.Maybe ( fromMaybe, isNothing, isJust, fromJust )
 import           Data.Monoid ( Monoid(mconcat), (<>) )
-import           Data.Stringable as S ( Stringable(fromString, toString) )
-import           Data.Text.Format ( format )
+import qualified Data.Text.Format
+#if MIN_VERSION_shelly(1, 0, 0)
+import           Data.Text (Text)
+import qualified Data.Text as T
+import           Data.Text.Lazy (toStrict)
+#else
 import           Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
+#endif
 import           Data.Time.Clock ( getCurrentTime )
 import           Data.Time.Format ( readTime, formatTime )
 import           Data.Time.LocalTime
@@ -64,6 +70,8 @@ instance FromJSON FilePath where
 
 instance ToJSON FilePath where
   toJSON = toJSON . toTextIgnore
+
+format = (toStrict .) . Data.Text.Format.format
 
 version :: String
 version = "1.3.0"
@@ -231,8 +239,8 @@ runPushme opts = do
 pushmeCommand :: PushmeOpts -> [Store] -> [Fileset] -> [Container] -> IO ()
 pushmeCommand opts sts fsets cts
   | stores opts =
-    let fss    = fromString $ filesets opts
-        cls    = fromString $ classes opts
+    let fss    = T.pack $ filesets opts
+        cls    = T.pack $ classes opts
         sorted =
           sortBy (compare `on` (^._2.filesetPriority)) $
           filter
@@ -243,14 +251,15 @@ pushmeCommand opts sts fsets cts
           case cliArgs opts of
             [] -> cts
             xs -> nub $ mconcat $
-                 map (\n -> containersForStore (findStore (fromString n) sts)
+                 map (\n -> containersForStore (findStore (T.pack n) sts)
                                               cts) xs
 
     in for_ sorted $ \(ct, _) ->
          putStrLn $
-           printf "%-12s %-38.38s   %19s %5d"
-                  (toString (ct^.containerStore))
-                  (toString (toTextIgnore (ct^.containerPath)))
+           printf "%-12s %-12s %-28.38s   %19s %5d"
+                  (T.unpack (ct^.containerStore))
+                  (T.unpack (ct^.containerFileset))
+                  (T.unpack (toTextIgnore (ct^.containerPath)))
                   (maybe "" (formatTime defaultTimeLocale "%Y/%m/%d %H:%M:%S")
                          (ct^.containerLastSync))
                   (fromMaybe 0 (ct^.containerLastRev))
@@ -259,14 +268,14 @@ pushmeCommand opts sts fsets cts
     here <- shelly $ silently $ cmd "hostname"
     let this = findStore here sts
 
-    shelly $ debugL $ here <> " -> " <> fromString (show this)
+    shelly $ debugL $ here <> " -> " <> T.pack (show this)
 
     cts' <-
       foldl'
         (\acc host -> do
             innerCts   <- acc
             updatedCts <- shelly $
-              processHost (here,this) sts fsets innerCts (fromString host)
+              processHost (here,this) sts fsets innerCts (T.pack host)
             -- This can get expensive fast, but the number of containers
             -- involved should never be large.  The idea is to gather the most
             -- recent data from all updated containers, until we're back to a
@@ -303,11 +312,11 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
           else (defaultSelf, thereRaw)
         that = findStore there sts
 
-    debugL $ (this^.storeHostRe) <> " -> " <> fromString (show this)
-    debugL $ there <> " -> " <> fromString (show that)
+    debugL $ (this^.storeHostRe) <> " -> " <> T.pack (show this)
+    debugL $ there <> " -> " <> T.pack (show that)
 
     noticeL $ format "\ESC[31mSynchronizing {} -> {}\ESC[0m"
-                     [this^.storeName , that^.storeName]
+                     [this^.storeName, that^.storeName]
 
     xs <- case lookup (that^.storeName) (this^.storeTargets) of
       Nothing -> warningL "Nothing to do" >> return []
@@ -328,8 +337,8 @@ processHost defaultSelf@(here, _) sts fsets conts thereRaw
 
   where
     filterAndSortBindings bindings = do
-      fss <- fromString <$> getOption filesets
-      cls <- fromString <$> getOption classes
+      fss <- T.pack <$> getOption filesets
+      cls <- T.pack <$> getOption classes
       return
         $ sortBy (compare `on` (^.bindingFileset.filesetPriority))
         $ filter
@@ -412,7 +421,7 @@ reportMissingFiles label cont = do
         patterns     = map regexToGlob
                        . filter (`notElem` ["*", "*/", ".*", ".*/"])
                        . map stringify . T.lines $ optsText
-        patMatch f p = toString f =~ toString p
+        patMatch f p = T.unpack f =~ T.unpack p
         files'       =
           foldl' (\acc x ->
                      if any (patMatch x) patterns
@@ -429,7 +438,7 @@ createBinding (here,this) (there,that) fsets conts n = do
   let bnd =
         case find (\x -> x^.filesetName == n) fsets of
           Nothing ->
-            error $ toString  $ "Could not find fileset: " <> n
+            error $ T.unpack  $ "Could not find fileset: " <> n
           Just fs ->
             Binding {
                 _bindingThis =
@@ -462,7 +471,7 @@ createBinding (here,this) (there,that) fsets conts n = do
       let p' = toTextIgnore $ p </> fromText ".zfs" </> fromText "snapshot"
           u  = info^.infoStore.storeUserName
           h  = info^.infoHostName
-      listing <- sort <$> map (read . toString) <$>
+      listing <- sort <$> map (read . T.unpack) <$>
                 filter (T.all isDigit) <$> T.lines <$>
                 if storeIsLocal here (info^.infoStore)
                 then vrun "ls" ["-1", p']
@@ -483,7 +492,7 @@ containersForStore store =
 findContainer :: Fileset -> Store -> [Container] -> Container
 findContainer fileset store conts =
   fromMaybe
-    (error $ toString $
+    (error $ T.unpack $
      format "Could not find container for Store {} + Fileset {}"
      [ store^.storeName, fileset^.filesetName ]) $
     find (\x -> (x^.containerFileset) == (fileset^.filesetName))
@@ -530,13 +539,13 @@ updateContainers rev bnd = do
 findFileset :: Text -> [Fileset] -> Fileset
 findFileset n fsets =
   fromMaybe
-    (error $ toString $ "Could not find fileset matching name " <> n) $
+    (error $ T.unpack $ "Could not find fileset matching name " <> n) $
     find (\x -> n == x^.filesetName) fsets
 
 findStore :: Text -> [Store] -> Store
 findStore n sts =
   fromMaybe
-    (error $ toString $ "Could not find store matching hostname " <> n) $
+    (error $ T.unpack $ "Could not find store matching hostname " <> n) $
     find (\x -> matchText (x^.storeHostRe) n) sts
 
 storeIsLocal :: Text -> Store -> Bool
@@ -561,7 +570,7 @@ data FullPath = LocalPath ContainerPath
               deriving (Show, Eq)
 
 convertPath :: FilePath -> String
-convertPath = toString
+convertPath = T.unpack . toTextIgnore
 
 getHomePath :: Text -> IO FilePath
 getHomePath p = (</> fromText p) <$> getHomeDirectory
@@ -681,8 +690,8 @@ createSyncCommands bnd = do
 
               else sub $ do
                    cd path
-                   vrun_ "git-annex" $ [" -q" | not verb && not deb]
-                                    <> [" sync"]
+                   vrun_ "git-annex" $ ["-q" | not verb && not deb]
+                                    <> ["sync"]
 
           noticeL $ format "{}: Git Annex synchronized"
                            [ bnd^.bindingFileset.filesetName ]
@@ -758,7 +767,7 @@ createSyncCommands bnd = do
              , remoteReceive u h r recurseThat
              , updateContainers (Just e) bnd )
 
-    (l, r) -> error $ toString $
+    (l, r) -> error $ T.unpack $
          format "Unexpected paths {} and {}"
                 [ T.pack (show l), T.pack (show r) ]
 
@@ -841,7 +850,7 @@ volcopy label useSudo options src dest = do
         , "--filter=-p .com.apple.timemachine.supported" ]
 
         <> (if not (null sshCmd)
-            then ["--rsh", fromString sshCmd]
+            then ["--rsh", T.pack sshCmd]
             else [])
         <> ["-n" | dry]
         <> (if shhh
@@ -873,9 +882,9 @@ volcopy label useSudo options src dest = do
         noticeL $ format
             "{}: \ESC[34mSent \ESC[35m{}\ESC[0m\ESC[34m in {} files\ESC[0m (out of {} in {})"
             [ label
-            , fromString (humanReadable xfer),
+            , T.pack (humanReadable xfer),
               commaSep (fromIntegral sent)
-            , fromString (humanReadable total),
+            , T.pack (humanReadable total),
               commaSep (fromIntegral files) ]
       else
         doCopy (drun_ False) r toRemote useSudo options'
@@ -892,7 +901,7 @@ volcopy label useSudo options src dest = do
                    . intToText
 
     field :: Text -> M.Map Text Text -> Integer
-    field x stats = fromMaybe 0 $ read . toString <$> M.lookup x stats
+    field x stats = fromMaybe 0 $ read . T.unpack <$> M.lookup x stats
 
     doCopy f rsync False False os = f rsync os
     doCopy f rsync False True os  = sudo f rsync os
@@ -908,7 +917,7 @@ readDataFile p = do
   p' <- getHomePath p
   d  <- Data.Yaml.decode <$> BC.readFile (convertPath p')
   case d of
-    Nothing -> error $ toString $ "Failed to read file " <> p
+    Nothing -> error $ T.unpack $ "Failed to read file " <> p
     Just d' -> return d'
 
 writeDataFile :: ToJSON a => Text -> a -> IO ()
@@ -930,10 +939,10 @@ getOption :: Data a => (a -> b) -> Sh b
 getOption = liftIO . getOption'
 
 matchText :: Text -> Text -> Bool
-matchText = flip ((=~) `on` toString)
+matchText = flip ((=~) `on` T.unpack)
 
 intToText :: Int -> Text
-intToText = fromString . show
+intToText = T.pack . show
 
 remote :: (FilePath -> [Text] -> Sh a) -> Text -> Text -> [Text] -> Sh a
 remote f user host xs = do
@@ -989,22 +998,22 @@ srun_ :: FilePath -> [Text] -> Sh ()
 srun_ = void .: doRun run_ infoL (return ()) False True
 
 debugL :: Text -> Sh ()
-debugL = liftIO . debugM "pushme" . toString
+debugL = liftIO . debugM "pushme" . T.unpack
 
 infoL :: Text -> Sh ()
-infoL = liftIO . infoM "pushme" . toString
+infoL = liftIO . infoM "pushme" . T.unpack
 
 noticeL :: Text -> Sh ()
-noticeL = liftIO . noticeM "pushme" . toString
+noticeL = liftIO . noticeM "pushme" . T.unpack
 
 warningL :: Text -> Sh ()
-warningL = liftIO . warningM "pushme" . toString
+warningL = liftIO . warningM "pushme" . T.unpack
 
 errorL :: Text -> Sh ()
-errorL = liftIO . errorM "pushme" . toString
+errorL = liftIO . errorM "pushme" . T.unpack
 
 criticalL :: Text -> Sh ()
-criticalL = liftIO . criticalM "pushme" . toString
+criticalL = liftIO . criticalM "pushme" . T.unpack
 
 humanReadable :: Integer -> String
 humanReadable x
