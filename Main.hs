@@ -74,7 +74,7 @@ instance ToJSON FilePath where
 format = (toStrict .) . Data.Text.Format.format
 
 version :: String
-version = "1.3.0"
+version = "1.4.1"
 
 copyright :: String
 copyright = "2013"
@@ -668,15 +668,16 @@ createSyncCommands bnd = do
                   $ lookup (bnd^.bindingFileset.filesetName) flags
 
       annexCmds isRemote path = do
-          vrun_ "git-annex" $ ["-q" | not verb && not deb] <> ["add", "."]
-          vrun_ "git-annex" $ ["-q" | not verb && not deb] <> ["sync"]
+          vrun_ "git-annex" $ ["-q" | not verb && not deb]
+              <> ["add", "-c", "alwayscommit=false", "."]
           vrun_ "git-annex" $ ["-q" | not verb && not deb]
                 <> [ "--auto"
                    | not ((bnd^.bindingThat.infoStore.storeIsPrimary)
                           || cpAll) ]
-                <> [ "copy" ]
+                <> [ "copy", "-c", "alwayscommit=false" ]
                 <> annexFlags
                 <> [ "--to", bnd^.bindingThat.infoStore.storeAnnexName ]
+          vrun_ "git-annex" $ ["-q" | not verb && not deb] <> ["sync"]
 
           if isRemote
               then sub $ do
