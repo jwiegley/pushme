@@ -15,9 +15,9 @@ import           Control.Exception ( SomeException, Exception, catch )
 import           Control.Lens
 import           Control.Monad ( void, liftM2, (>=>) )
 import           Data.Aeson ( ToJSON(..), FromJSON(..) )
-import           Data.Aeson.TH ( deriveJSON )
+import           Data.Aeson.TH
 import qualified Data.ByteString.Char8 as BC ( writeFile, readFile )
-import           Data.Char ( isDigit )
+import           Data.Char ( isDigit, toLower )
 import           Data.Data ( Data )
 import           Data.Foldable ( for_ )
 import           Data.Function ( on )
@@ -44,7 +44,7 @@ import           Filesystem ( isFile, getHomeDirectory )
 import           GHC.Conc ( setNumCapabilities, getNumProcessors )
 import           Options.Applicative
 import           Prelude hiding (FilePath, catch)
-import           Shelly hiding (find)
+import           Shelly hiding (find, trace)
 import           System.Environment ( getArgs, withArgs )
 import           System.IO ( stderr )
 import           System.IO.Storage ( withStore, putValue, getValue )
@@ -71,7 +71,11 @@ instance FromJSON FilePath where
 instance ToJSON FilePath where
   toJSON = toJSON . toTextIgnore
 
+#if MIN_VERSION_shelly(1, 0, 0)
 format = (toStrict .) . Data.Text.Format.format
+#else
+format = Data.Text.Format.format
+#endif
 
 version :: String
 version = "1.4.1"
@@ -135,7 +139,7 @@ data Fileset = Fileset
 
 makeLenses ''Fileset
 
-$(deriveJSON (drop 8) ''Fileset)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 8, constructorTagModifier = map toLower} ''Fileset)
 
 -- | A 'Container' is a physical grouping of files, reflecting an instance of
 --   a 'Fileset' somewhere on a storage medium.  For every 'Fileset', there
@@ -155,7 +159,7 @@ data Container = Container
 
 makeLenses ''Container
 
-$(deriveJSON (drop 10) ''Container)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 10, constructorTagModifier = map toLower} ''Container)
 
 instance NFData Container where
   rnf a = a `seq` ()
@@ -183,7 +187,7 @@ data Store = Store
 
 makeLenses ''Store
 
-$(deriveJSON (drop 6) ''Store)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 6, constructorTagModifier = map toLower} ''Store)
 
 instance NFData Store where
   rnf a = a `seq` ()
@@ -872,12 +876,11 @@ volcopy label useSudo options src dest = do
       then silently $ do
         output <- doCopy (drun False) r toRemote useSudo options'
         let stats = M.fromList $
-                    map (liftM2 (,) head (head . T.words . last)
-                           . T.splitOn ": ")
+                    map (fmap (T.filter (/= ',') . (!! 1) . T.words) . T.breakOn ": ")
                     . filter (": " `T.isInfixOf`)
                     . T.lines $ output
             files = field "Number of files" stats
-            sent  = field "Number of files transferred" stats
+            sent  = field "Number of regular files transferred" stats
             total = field "Total file size" stats
             xfer  = field "Total transferred file size" stats
         noticeL $ format
