@@ -9,12 +9,12 @@
 , lens
 , optparseApplicative
 , parallelIo
-, prettyShow
 , regexPosix
 , safe
 , shelly
 , systemFileio
 , systemFilepath
+, temporary
 , text
 , textFormat
 , time
@@ -39,12 +39,12 @@ cabal.mkDerivation (self: {
     lens
     optparseApplicative
     parallelIo
-    prettyShow
     regexPosix
     safe
     shelly
     systemFileio
     systemFilepath
+    temporary
     text
     textFormat
     time
