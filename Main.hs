@@ -604,8 +604,7 @@ getSyncCommands opts bnd =
           vrun_ "git-annex" $ ["-q" | not verb]
               <> ["add", "-c", "alwayscommit=false", "."]
           vrun_ "git-annex" $ ["-q" | not verb]
-              <> [ "--auto"
-                 | not (orOf annexIsPrimary thatAnnex || cpAll) ]
+              <> [ "--auto" | not (orOf annexIsPrimary thatAnnex || cpAll) ]
               <> [ "copy", "-c", "alwayscommit=false" ]
               <> annexFlags'
               <> [ "--to", annexTarget ]
@@ -806,14 +805,13 @@ rsyncCopy label options src dest = do
     commaSep :: Int -> Text
     commaSep = fst
         . T.foldr (\x (xs, num :: Int) ->
-                               if num /= 0 && num `mod` 3 == 0
-                               then (x `T.cons` ',' `T.cons` xs, num + 1)
-                               else (x `T.cons` xs, num + 1))
-                             ("", 0)
-                   . tshow
+                    if num /= 0 && num `mod` 3 == 0
+                    then (x `T.cons` ',' `T.cons` xs, num + 1)
+                    else (x `T.cons` xs, num + 1)) ("", 0)
+        . tshow
 
-    field :: Text -> M.Map Text Text -> Integer
-    field x stats = fromMaybe 0 $ read . unpack <$> M.lookup x stats
+    field :: Text -> M.Map Text Text -> Maybe Integer
+    field x stats = read . unpack <$> M.lookup x stats
 
     doCopy f rsync False False os = f rsync os
     doCopy f rsync False True os  = sudo f rsync os
@@ -828,17 +826,18 @@ rsyncCopy label options src dest = do
                 $ filter (": " `T.isInfixOf`)
                 $ T.lines output
             files = field "Number of files" stats
-            sent  = field "Number of files transferred" stats
+            sent  = field "Number of regular files transferred" stats
+                <|> field "Number of files transferred" stats
             total = field "Total file size" stats
             xfer  = field "Total transferred file size" stats
         liftIO $ log' $ format
             ("{}: \ESC[34mSent \ESC[35m{}\ESC[0m\ESC[34m "
                 <> "in {} files\ESC[0m (out of {} in {})")
             [ label
-            , humanReadable den xfer
-            , commaSep (fromIntegral sent)
-            , humanReadable den total
-            , commaSep (fromIntegral files)
+            , humanReadable den (fromMaybe 0 xfer)
+            , commaSep (fromIntegral (fromMaybe 0 sent))
+            , humanReadable den (fromMaybe 0 total)
+            , commaSep (fromIntegral (fromMaybe 0 files))
             ]
 
     remoteRsync useSudo' _ = if useSudo'
@@ -922,11 +921,10 @@ humanReadable den x =
   where
     f :: Integer -> String -> Maybe String
     f n s | x < (den^succ n) =
-        Just $ printf
-            (if n == 0
-             then "%d" ++ s
-             else "%." ++ show (min 3 (pred n)) ++ "f" ++ s)
-            (fromIntegral x / (fromIntegral den^n :: Double))
+        Just $ if n == 0
+               then printf ("%d" ++ s) x
+               else printf ("%." ++ show (min 3 (pred n)) ++ "f" ++ s)
+                   (fromIntegral x / (fromIntegral den^n :: Double))
     f _ _ = Nothing
 
 -- Main.hs (pushme) ends here
