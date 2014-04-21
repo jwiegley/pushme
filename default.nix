@@ -3,13 +3,13 @@
 , conduit
 , conduitCombinators
 , conduitExtra
-, deepseq
 , logging
 , monadLogger
 , ioStorage
 , lens
 , optparseApplicative
 , parallelIo
+, prettyShow
 , regexPosix
 , safe
 , shelly
@@ -18,7 +18,6 @@
 , text
 , textFormat
 , time
-, unix ? null
 , unorderedContainers
 , yaml
 }:
@@ -34,13 +33,13 @@ cabal.mkDerivation (self: {
     conduit
     conduitCombinators
     conduitExtra
-    deepseq
     logging
     monadLogger
     ioStorage
     lens
     optparseApplicative
     parallelIo
+    prettyShow
     regexPosix
     safe
     shelly
@@ -49,7 +48,6 @@ cabal.mkDerivation (self: {
     text
     textFormat
     time
-    unix
     unorderedContainers
     yaml
   ];
