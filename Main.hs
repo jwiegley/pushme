@@ -263,18 +263,21 @@ instance FromJSON Fileset where
         f fs _       = const fs
     parseJSON _ = errorL "Error parsing Fileset"
 
-data BindingCommand = BindingSync | BindingSnapshot
-    deriving (Show, Eq)
-
-makePrisms ''BindingCommand
-
 data Host = Host
     { _hostName    :: Text
     , _hostAliases :: [Text]
     }
     deriving (Show, Eq)
 
+defaultHost :: Text -> Host
+defaultHost n = Host n []
+
 makeLenses ''Host
+
+data BindingCommand = BindingSync | BindingSnapshot
+    deriving (Show, Eq)
+
+makePrisms ''BindingCommand
 
 data Binding = Binding
     { _fileset     :: Fileset
@@ -289,7 +292,7 @@ makeLenses ''Binding
 
 isLocal :: Binding -> Bool
 isLocal bnd =
-    bnd^.source.hostName == bnd^.target.hostName
+       bnd^.source.hostName == bnd^.target.hostName
     || bnd^.source.hostName `elem` bnd^.target.hostAliases
 
 targetHost :: Binding -> Maybe Host
@@ -309,7 +312,7 @@ main = withStdoutLogging $ do
     setLogTimeFormat "%H:%M:%S"
 
     hosts <- readHostsFile
-    execute opts hosts `finally` stopGlobalPool
+    processBindings opts hosts `finally` stopGlobalPool
   where
     optsDef = info
         (helper <*> pushmeOpts)
@@ -332,6 +335,21 @@ readHostsFile = do
         else
             return mempty
 
+readFilesets :: IO (Map Text Fileset)
+readFilesets = do
+    confD <- getHomePath (".pushme" </> "conf.d")
+    exists <- isDirectory confD
+    unless exists $
+        errorL $ "Please define filesets, "
+            <> "using files named ~/.pushme/conf.d/<name>.yml"
+
+    fmap (M.fromList . map ((^.fsName) &&& id))
+        $ runResourceT
+        $ sourceDirectory confD
+            $= filterC (\n -> extension n == Just "yml")
+            $= mapMC (liftIO . readDataFile)
+            $$ sinkList
+
 readDataFile :: FromJSON a => FilePath -> IO a
 readDataFile p = do
     d  <- Data.Yaml.decode <$> B.readFile (encodeString p)
@@ -339,27 +357,14 @@ readDataFile p = do
         Nothing -> errorL $ "Failed to read file " <> toTextIgnore p
         Just d' -> return d'
 
-execute :: Options -> Map Text Host -> IO ()
-execute opts hosts = do
-    confD <- getHomePath (".pushme" </> "conf.d")
-    exists <- isDirectory confD
-    unless exists $
-        errorL $ "Please define filesets, "
-            <> "using files named ~/.pushme/conf.d/<name>.yml"
-
-    fsets <- fmap (M.fromList . map ((^.fsName) &&& id))
-        $ runResourceT
-        $ sourceDirectory confD
-            $= filterC (\n -> extension n == Just "yml")
-            $= mapMC (liftIO . (readDataFile :: FilePath -> IO Fileset))
-            $$ sinkList
-
+processBindings :: Options -> Map Text Host -> IO ()
+processBindings opts hosts = do
+    fsets    <- readFilesets
     thisHost <- T.init <$> shelly (silently $ cmd "hostname")
-    let dflt = Host (pack (fromName opts)) []
+    let dflt = defaultHost (pack (fromName opts))
         here = hosts^.at thisHost.non dflt.hostName
     when (T.null here) $
         errorL "Please identify the current host using --from"
-
     parallel_
         $ map (applyBinding opts)
         $ relevantBindings opts here hosts fsets
@@ -376,10 +381,10 @@ relevantBindings opts thisHost hosts fsets
         <*> map pack (cliArgs opts)
   where
     matching bnd =
-        let fs = bnd^.fileset
-        in (T.null fss || matchText fss (fs^.fsName))
+           (T.null fss || matchText fss (fs^.fsName))
          && (T.null cls || matchText cls (fs^.fsClass))
       where
+        fs  = bnd^.fileset
         fss = pack (filesets opts)
         cls = pack (classes opts)
 
@@ -586,23 +591,19 @@ syncUsingRsync opts bnd s1 s2 =
 
 rsync :: Options -> Fileset -> Rsync -> FilePath -> Rsync -> Text -> Sh ()
 rsync opts fs srcRsync src destRsync dest = do
-    let rfs = (srcRsync^.rsyncFilters) <> (destRsync^.rsyncFilters)
+    let rfs   = (srcRsync^.rsyncFilters) <> (destRsync^.rsyncFilters)
+        go xs = doRsync opts (fs^.fsName) xs (toTextIgnore src) dest
     case rfs of
-        [] -> doRsync opts (fs^.fsName) [] (toTextIgnore src) dest
+        [] -> go []
 
-        filters -> withTmpDir $ \p -> do
-            let fpath = p </> "filters"
-            writefile fpath (T.unlines filters)
-
+        filters -> do
             when (srcRsync^.rsyncReportMissing) $
                 liftIO $ reportMissingFiles fs srcRsync
 
-            doRsync
-                opts
-                (fs^.fsName)
-                ["--include-from=" <> toTextIgnore fpath]
-                (toTextIgnore src)
-                dest
+            withTmpDir $ \p -> do
+                let fpath = p </> "filters"
+                writefile fpath (T.unlines filters)
+                go ["--include-from=" <> toTextIgnore fpath]
 
 reportMissingFiles :: Fileset -> Rsync -> IO ()
 reportMissingFiles fs r =
