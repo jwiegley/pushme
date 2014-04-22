@@ -27,7 +27,7 @@ import           Data.Function (on)
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as M
-import           Data.Maybe (catMaybes, fromMaybe, fromJust)
+import           Data.Maybe (catMaybes, fromMaybe, fromJust, isNothing)
 import           Data.Monoid (mempty)
 import           Data.Ord (comparing)
 import           Data.Text (Text, pack, unpack)
@@ -47,7 +47,7 @@ import           Shelly hiding ((</>), find, trace)
 import           Text.Printf (printf)
 import           Text.Regex.Posix ((=~))
 
---import Debug.Trace
+import Debug.Trace
 
 version :: String
 version = "2.0.0"
@@ -299,6 +299,25 @@ targetHost :: Binding -> Maybe Host
 targetHost bnd | isLocal bnd = Nothing
                | otherwise   = Just (bnd^.target)
 
+data ExeMode = Normal | Sudo | SudoAsRoot
+
+data ExeEnv = ExeEnv
+    { exeMode    :: ExeMode
+    , exeRemote  :: Maybe Host
+    , exeCwd     :: Maybe FilePath
+    , exeDiscard :: Bool         -- ^ Discard process output.
+    , exeOpts    :: Options
+    }
+
+defaultExeEnv :: Options -> ExeEnv
+defaultExeEnv = ExeEnv Normal Nothing Nothing False
+
+env :: Options -> Binding -> ExeEnv
+env opts bnd = ExeEnv Normal (targetHost bnd) Nothing False opts
+
+sudoEnv :: Options -> Binding -> ExeEnv
+sudoEnv opts bnd = (env opts bnd) { exeMode = Sudo }
+
 main :: IO ()
 main = withStdoutLogging $ do
     opts <- execParser optsDef
@@ -428,16 +447,12 @@ printBinding bnd = do
 
 snapshotBinding :: Options -> Binding -> Sh ()
 snapshotBinding opts bnd@((^? that.zfsScheme) -> Just z) = do
-    mrev <- determineLastRev opts (targetHost bnd) z
-    let nextRev      = maybe 1 succ mrev
-        thatSnapshot = z^.zfsPoolPath <> "@" <> decodeString (show nextRev)
-        snapCmd      =
-            map toTextIgnore $ ["zfs", "snapshot"] <> [thatSnapshot]
-    liftIO $ log' $ format "Creating snapshot {}"
-        [toTextIgnore thatSnapshot]
-    if isLocal bnd
-        then drun_ opts "sudo" snapCmd
-        else remote opts drun_  (bnd^.target) snapCmd
+    mrev <- determineLastRev (env opts bnd) z
+    let nextRev = maybe 1 succ mrev
+        thatSnapshot =
+            toTextIgnore $ z^.zfsPoolPath <> "@" <> decodeString (show nextRev)
+    liftIO $ log' $ format "Creating snapshot {}" [thatSnapshot]
+    execute_ (env opts bnd) "zfs" ["snapshot", thatSnapshot]
 snapshotBinding _ _ = return ()
 
 syncBinding :: Options -> Binding -> Sh ()
@@ -456,106 +471,148 @@ syncStores opts bnd ((^? zfsScheme) -> Just z1) ((^? zfsScheme) -> Just z2) =
     syncZfsSchemes opts bnd z1 z2
 syncStores opts bnd s1 s2 = syncUsingRsync opts bnd s1 s2
 
+execute :: ExeEnv -> FilePath -> [Text] -> Sh Text
+execute ExeEnv {..} name args = do
+    cmdName <- findCmd name
+    let (name', args') = case exeMode of
+            Normal     -> (cmdName, args)
+            Sudo       -> ("sudo", toTextIgnore cmdName:args)
+            SudoAsRoot -> sudoAsRoot cmdName args
+        (name'', args'')= case exeRemote of
+            Nothing -> (name', args')
+            Just h  ->
+                uncurry (remote h) $ case exeCwd of
+                    Nothing  -> (name', args')
+                    Just cwd ->
+                        (fromText $ T.concat $
+                             [ "\"cd "
+                             , escape (toTextIgnore cwd)
+                             , "; "
+                             , toTextIgnore name'
+                             ]
+                            <> args'
+                            <> ["\""], [])
+        runner p xs
+            | exeDiscard = run_ p xs >> return ""
+            | otherwise  = run p xs
+        runner' p xs =
+            (case exeCwd of
+                  Just cwd | isNothing exeRemote -> chdir cwd
+                  _ -> id) $ runner p xs
+    if dryRun exeOpts || noSync exeOpts
+        then return ""
+        else do
+            n <- findCmd name''
+            liftIO $ debug' $ format "{} {}" [toTextIgnore n, tshow args'']
+            runner' n args''
+  where
+    findCmd n
+        -- Assume commands with spaces in them are "known"
+        | " " `T.isInfixOf` toTextIgnore n = return n
+        | relative n = do
+            c <- which n
+            case c of
+                Nothing -> errorL $ "Failed to find command: " <> toTextIgnore n
+                Just c' -> return c'
+        | otherwise  = return n
+
+    remote :: Host -> FilePath -> [Text] -> (FilePath, [Text])
+    remote host p xs =
+        let sshCmd = ssh exeOpts
+        in (if null sshCmd then "ssh" else decodeString sshCmd,
+            host^.hostName : toTextIgnore p : xs)
+
+    sudoAsRoot :: FilePath -> [Text] -> (FilePath, [Text])
+    sudoAsRoot p xs =
+        ("sudo", [ "su", "-", "root", "-c"
+                 -- Pass the argument to su as a single, escaped string.
+                 , T.unwords (map escape (toTextIgnore p:xs))
+                 ])
+
+execute_ :: ExeEnv -> FilePath -> [Text] -> Sh ()
+execute_ env' fp args = void $ execute env' { exeDiscard = True } fp args
+
 syncAnnexSchemes :: Options -> Binding -> Annex -> Annex -> Sh ()
 syncAnnexSchemes opts bnd a1 a2 =
     (if isLocal bnd then id else escaping False)
-        $ (if verbose opts then id else silently)
-        $ chdir (a1^.annexPath) go
+        $ (if verbose opts then id else silently) go
   where
     verb = verbose opts
     annexTarget = a2^.annexName.non (bnd^.target.hostName)
     go = do
-        drun_ opts "git-annex" $ ["-q" | not verb]
+        let runner1_ = execute_ $
+                (env opts bnd) { exeCwd    = Just (a1^.annexPath)
+                               , exeRemote = Nothing
+                               }
+            runner2_ = execute_ $
+                (env opts bnd) { exeCwd = Just (a2^.annexPath) }
+
+        -- Add, copy, and sync from the source.
+        runner1_ "git-annex" $ ["-q" | not verb]
             <> ["add", "-c", "alwayscommit=false", "."]
-        drun_ opts "git-annex" $ ["-q" | not verb]
+        runner1_ "git-annex" $ ["-q" | not verb]
             <> [ "--auto"
                | not (a2^.annexIsPrimary || copyAll opts) ]
             <> [ "copy", "-c", "alwayscommit=false" ]
             <> [ "--not", "--in", annexTarget ]
             <> a1^.annexFlags
             <> [ "--to", annexTarget ]
-        drun_ opts "git-annex" $ ["-q" | not verb] <> ["sync"]
+        runner1_ "git-annex" $ ["-q" | not verb] <> ["sync"]
 
-        if isLocal bnd
-            then chdir (a2^.annexPath) $
-                drun_ opts "git-annex" $ ["-q" | not verb] <> ["sync"]
-            else remote opts drun_ (bnd^.target)
-                [ T.concat
-                      $ [ "\"cd '"
-                        , toTextIgnore (a2^.annexPath)
-                        , "'; git-annex"
-                        ]
-                     <> [" -q" | not verb]
-                     <> [" sync", "\""]
-                ]
+        -- Sync to the destination.
+        runner2_ "git-annex" $ ["-q" | not verb] <> ["sync"]
 
         liftIO $ log' $ format "{}: Git Annex synchronized"
             [ bnd^.fileset.fsName ]
 
 syncZfsSchemes :: Options -> Binding -> Zfs -> Zfs -> Sh ()
 syncZfsSchemes opts bnd z1 z2 = do
-    rev1 <- determineLastRev opts Nothing z1
-    rev2 <- determineLastRev opts (targetHost bnd) z2
+    let env' = env opts bnd
+    rev1 <- determineLastRev (env' { exeRemote = Nothing }) z1
+    rev2 <- determineLastRev env' z2
     let p = z1^.zfsPoolPath
-        r = z2^.zfsPoolPath
+        r = toTextIgnore (z2^.zfsPoolPath)
         msendArgs = case (rev1, rev2) of
             (Just thisRev, Just thatRev) ->
                 if thisRev > thatRev
-                then Just $ localSendTwoRevs p thatRev thisRev
+                then Just $ sendTwoRevs p thatRev thisRev
                 else Nothing
             (Just thisRev, Nothing) ->
-                Just $ localSendRev p thisRev
+                Just $ sendRev p thisRev
             (Nothing, _) ->
-                Just $ localSend (toTextIgnore p)
-        recvCmd = case mtarg of
-            Nothing -> localReceive (toTextIgnore r)
-            Just h  -> remoteReceive h (toTextIgnore r)
+                Just $ send (toTextIgnore p)
+        env'' = (defaultExeEnv opts) { exeMode = Sudo }
 
     case msendArgs of
-        Nothing -> liftIO $ warn "Remote has newer snapshot revision"
-        Just sendArgs -> do
-            liftIO $ debug' $ T.intercalate " " sendArgs
-            recvArgs <- recvCmd
-            if null recvArgs
-                then drun_ opts (fromText (head sendArgs)) (tail sendArgs)
-                else escaping False
-                    $ drun_ opts (fromText (head sendArgs))
-                    $ tail sendArgs <> ["|"] <> recvArgs
+        Nothing      -> liftIO $ warn "Remote has newer snapshot revision"
+        Just (c, xs) -> execute_ env'' c $ xs <> ["|", "zfs", "recv", "-F", r]
   where
-    mtarg = targetHost bnd
+    send pool = ("zfs", ["send", pool])
 
-    localSend pool = ["sudo", "zfs", "send"] <> [pool]
+    sendRev poolPath r1 =
+        ("zfs",
+         ["send"]
+         <> ["-v" | verbose opts]
+         <> [ toTextIgnore poolPath <> "@" <> tshow r1 ])
 
-    localSendRev poolPath r1 =
-           ["sudo", "zfs", "send"]
-        <> ["-v" | verbose opts]
-        <> [ toTextIgnore poolPath <> "@" <> tshow r1 ]
+    sendTwoRevs poolPath r1 r2 =
+        ("zfs",
+         ["send"]
+         <> ["-v" | verbose opts]
+         <> [ "-I"
+            , toTextIgnore poolPath <> "@" <> tshow r1
+            , toTextIgnore poolPath <> "@" <> tshow r2
+            ])
 
-    localSendTwoRevs poolPath r1 r2 =
-           ["sudo", "zfs", "send"]
-        <> ["-v" | verbose opts]
-        <> [ "-I"
-           , toTextIgnore poolPath <> "@" <> tshow r1
-           , toTextIgnore poolPath <> "@" <> tshow r2
-           ]
-
-    localReceive pool = return $ ["sudo", "zfs", "recv"] <> ["-F", pool]
-
-    remoteReceive h pool =
-        remote opts (\_ x xs -> return (toTextIgnore x:xs)) h  $
-            ["zfs", "recv"] <> ["-F", pool ]
-
-determineLastRev :: Options -> Maybe Host -> Zfs -> Sh (Maybe Int)
-determineLastRev opts mhost zfs = silently $ do
-    let p = (zfs^.zfsPath) </> ".zfs" </> "snapshot"
+determineLastRev :: ExeEnv -> Zfs -> Sh (Maybe Int)
+determineLastRev env' zfs = silently $ do
+    let p = toTextIgnore $ (zfs^.zfsPath) </> ".zfs" </> "snapshot"
     fmap lastMay
           $ sort
         <$> map (read . unpack)
         <$> filter (T.all isDigit)
         <$> T.lines
-        <$> case mhost of
-            Nothing -> drun opts "ls" ["-1", toTextIgnore p]
-            Just h  -> remote opts drun h ["ls", "-1", toTextIgnore p]
+        <$> execute env' "ls" ["-1", p]
 
 syncUsingRsync :: Options -> Binding -> Store -> Store -> Sh ()
 syncUsingRsync opts bnd s1 s2 =
@@ -570,9 +627,9 @@ syncUsingRsync opts bnd s1 s2 =
               Just targ -> format "{}:{}" [targ, escape (toTextIgnore r)])
   where
     h = case targetHost bnd of
-        Nothing   -> Nothing
+        Nothing -> Nothing
         Just targ
-            | Just n <- s2^?rsyncScheme.rsyncName -> n
+            | Just (Just n) <- s2^?rsyncScheme.rsyncName -> Just n
             | otherwise -> Just (targ^.hostName)
 
     Just (asDirectory -> l)
@@ -646,7 +703,7 @@ doRsync opts label options src dest = do
         sshCmd   = ssh opts
         shhh     = not verb
         toRemote = ":" `T.isInfixOf` dest
-        options' =
+        args     =
             [ "-aHEy"               -- jww (2012-09-23): maybe -A too?
             -- , "--fileflags"
             , "--delete-after"
@@ -677,34 +734,17 @@ doRsync opts label options src dest = do
             <> (if shhh
                 then ["--stats"]
                 else if verb then ["-P"] else ["-v"])
+            <> ["--rsync-path=sudo rsync" | toRemote]
             <> options
             <> [src, dest]
+        analyze = shhh && not noSy
+        env' =  (defaultExeEnv opts)
+            { exeMode    = if toRemote then SudoAsRoot else Sudo
+            , exeDiscard = not analyze
+            }
 
-    rsyncCmd <- which "rsync"
-    case rsyncCmd of
-        Nothing -> errorL "Could not find rsync!"
-        Just r
-            | shhh && not noSy -> silently $ runRsync r toRemote options' den
-            | otherwise     -> doCopy (drun_ opts) r toRemote options'
-
-  where
-    doCopy f r False os = f "sudo" (toTextIgnore r:os)
-    doCopy f r True os  = asRoot f r (remoteRsync True r:os)
-      where
-        remoteRsync useSudo' _ = if useSudo'
-                                 then "--rsync-path=sudo rsync"
-                                 else "--rsync-path=rsync"
-
-        asRoot :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
-        asRoot k p xs =
-            k "sudo" [ "su", "-", "root", "-c"
-                     , T.unwords (map (\x -> "\"" <> x <> "\"") xs')
-                     ]
-          where
-            xs' = toTextIgnore p:xs
-
-    runRsync r toRemote os den = do
-        output <- doCopy (drun opts) r toRemote os
+    output <- (if analyze then silently else id) $ execute env' "rsync" args
+    when analyze $ do
         let stats = M.fromList
                 $ map (fmap (T.filter (/= ',') . (!! 1) . T.words)
                            . T.breakOn ": ")
@@ -724,47 +764,17 @@ doRsync opts label options src dest = do
             , humanReadable den (fromMaybe 0 total)
             , commaSep (fromIntegral (fromMaybe 0 files))
             ]
-      where
-        field :: Text -> M.Map Text Text -> Maybe Integer
-        field x stats = read . unpack <$> M.lookup x stats
+  where
+    field :: Text -> M.Map Text Text -> Maybe Integer
+    field x stats = read . unpack <$> M.lookup x stats
 
-        commaSep :: Int -> Text
-        commaSep = fst
-            . T.foldr (\x (xs, num :: Int) ->
-                        if num /= 0 && num `mod` 3 == 0
-                        then (x `T.cons` ',' `T.cons` xs, num + 1)
-                        else (x `T.cons` xs, num + 1)) ("", 0)
-            . tshow
-
-remote :: Options -> (Options -> FilePath -> [Text] -> Sh a) -> Host -> [Text] -> Sh a
-remote opts f host xs = do
-    let sshCmd = ssh opts
-    p <- if null sshCmd
-        then which "ssh"
-        else return $ Just (decodeString sshCmd)
-    case p of
-        Nothing -> errorL "Could not find ssh!"
-        Just r  ->
-            let ys = T.words (toTextIgnore r) <> [host^.hostName] <> xs
-            in f opts (fromText (head ys)) (tail ys)
-
-doRun :: Options
-      -> (FilePath -> [Text] -> Sh a)
-      -> Sh a
-      -> FilePath
-      -> [Text]
-      -> Sh a
-doRun opts f retval n xs = do
-    liftIO $ debug' $ format "{} {}" [toTextIgnore n, T.unwords xs]
-    if dryRun opts || noSync opts
-        then retval
-        else f n xs
-
-drun :: Options -> FilePath -> [Text] -> Sh Text
-drun opts = doRun opts run (return "")
-
-drun_ :: Options -> FilePath -> [Text] -> Sh ()
-drun_ opts = (void .) . doRun opts run_ (return ())
+    commaSep :: Int -> Text
+    commaSep = fst
+        . T.foldr (\x (xs, num :: Int) ->
+                    if num /= 0 && num `mod` 3 == 0
+                    then (x `T.cons` ',' `T.cons` xs, num + 1)
+                    else (x `T.cons` xs, num + 1)) ("", 0)
+        . tshow
 
 getHomePath :: FilePath -> IO FilePath
 getHomePath p = (</> p) <$> getHomeDirectory
