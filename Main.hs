@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -18,7 +19,6 @@ import           Control.Lens hiding (argument)
 import           Control.Logging
 import           Control.Monad
 import           Control.Monad.Logger (LogLevel(..))
-import           Control.Monad.Trans.Maybe
 import           Data.Aeson
 import qualified Data.ByteString as B (readFile)
 import           Data.Char (isDigit)
@@ -27,7 +27,7 @@ import           Data.Function (on)
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as M
-import           Data.Maybe (catMaybes, fromMaybe, isJust, fromJust)
+import           Data.Maybe (catMaybes, fromMaybe, fromJust)
 import           Data.Monoid (mempty)
 import           Data.Ord (comparing)
 import           Data.Text (Text, pack, unpack)
@@ -44,13 +44,10 @@ import           Options.Applicative hiding (Success, (&))
 import           Prelude hiding (FilePath)
 import           Safe hiding (at)
 import           Shelly hiding ((</>), find, trace)
-import           System.IO hiding (FilePath)
-import           System.IO.Storage (withStore, putValue, getValue)
-import           System.IO.Temp
 import           Text.Printf (printf)
 import           Text.Regex.Posix ((=~))
 
-import Debug.Trace
+--import Debug.Trace
 
 version :: String
 version = "2.0.0"
@@ -61,9 +58,6 @@ copyright = "2013-4"
 pushmeSummary :: String
 pushmeSummary =
     "pushme " ++ version ++ ", (C) " ++ copyright ++ " John Wiegley"
-
-instance FromJSON FilePath where
-    parseJSON = fmap fromText . parseJSON
 
 data Options = Options
     { jobs     :: Int
@@ -135,17 +129,25 @@ pushmeOpts = Options
     <*> many (argument Just (metavar "ARGS"))
 
 data Rsync = Rsync
-    { _rsyncPath    :: FilePath
-    , _rsyncName    :: Maybe Text
-    , _rsyncFilters :: [Text]
+    { _rsyncPath          :: FilePath
+    , _rsyncName          :: Maybe Text
+    , _rsyncFilters       :: [Text]
+    , _rsyncReportMissing :: Bool
     }
     deriving (Show, Eq)
+
+defaultRsync :: FilePath -> Rsync
+defaultRsync p = Rsync p Nothing [] False
+
+instance FromJSON FilePath where
+    parseJSON = fmap fromText . parseJSON
 
 instance FromJSON Rsync where
     parseJSON (Object v) = Rsync
         <$> v .:  "Path"
         <*> v .:? "Host"
-        <*> v .:? "Filters" .!= []
+        <*> v .:? "Filters"       .!= []
+        <*> v .:? "ReportMissing" .!= False
     parseJSON _ = errorL "Error parsing Rsync"
 
 makeLenses ''Rsync
@@ -153,7 +155,6 @@ makeLenses ''Rsync
 data Zfs = Zfs
     { _zfsPath     :: FilePath
     , _zfsPoolPath :: FilePath
-    , _zfsLastRev  :: Maybe Int
     }
     deriving (Show, Eq)
 
@@ -161,7 +162,6 @@ instance FromJSON Zfs where
     parseJSON (Object v) = Zfs
         <$> v .: "Path"
         <*> v .: "PoolPath"
-        <*> pure Nothing
     parseJSON _ = errorL "Error parsing Zfs"
 
 makeLenses ''Zfs
@@ -169,7 +169,7 @@ makeLenses ''Zfs
 data Annex = Annex
     { _annexPath      :: FilePath
     , _annexName      :: Maybe Text
-    , _annexFlags     :: [(Text, [(Text, [Text])])]
+    , _annexFlags     :: [Text]
     , _annexIsPrimary :: Bool
     }
     deriving (Show, Eq)
@@ -201,7 +201,7 @@ makeLenses ''Store
 
 instance FromJSON Store where
     parseJSON (Object v) = do
-        mpath  <- fmap rsyncDefault <$> v .:? "Path"
+        mpath  <- fmap (SchemeRsync . defaultRsync) <$> v .:? "Path"
         mrsync <- fmap SchemeRsync <$> v .:? "Rsync"
         mzfs   <- fmap SchemeZfs   <$> v .:? "Zfs"
         mannex <- fmap SchemeAnnex <$> v .:? "Annex"
@@ -209,9 +209,6 @@ instance FromJSON Store where
             & schemes.at "rsync" .~ (mrsync <|> mpath)
             & schemes.at "zfs"   .~ mzfs
             & schemes.at "annex" .~ mannex
-      where
-        rsyncDefault p = SchemeRsync (Rsync p Nothing [])
-
     parseJSON _ = errorL "Error parsing Store"
 
 rsyncScheme :: Traversal' Store Rsync
@@ -227,7 +224,6 @@ data Fileset = Fileset
     { _fsName          :: Text
     , _fsClass         :: Text
     , _fsPriority      :: Int
-    , _fsReportMissing :: Bool
     , _stores          :: Map Text Store
     } deriving (Show, Eq)
 
@@ -242,10 +238,9 @@ instance FromJSON Fileset where
     parseJSON (Object v) = do
         fset <- Fileset
             <$> v .:  "Name"
-            <*> v .:? "Class"         .!= ""
-            <*> v .:? "Priority"      .!= 1000
-            <*> v .:? "ReportMissing" .!= False
-            <*> v .:? "Stores"        .!= mempty
+            <*> v .:? "Class"    .!= ""
+            <*> v .:? "Priority" .!= 1000
+            <*> v .:? "Stores"   .!= mempty
         opts <- v .:? "Options" .!= mempty
         return $ M.foldlWithKey' f fset (opts :: Map Text (Map Text Value))
       where
@@ -255,8 +250,16 @@ instance FromJSON Fileset where
             k fs' "Filters" xs =
                 fs' & stores.traverse.rsyncScheme.rsyncFilters <>~ fromJSON' xs
             k fs' _ _ = fs'
+
         f fs "Zfs"   = const fs
-        f fs "Annex" = const fs
+
+        f fs "Annex" =
+            M.foldlWithKey' k fs
+          where
+            k fs' "Flags" xs =
+                fs' & stores.traverse.annexScheme.annexFlags <>~ fromJSON' xs
+            k fs' _ _ = fs'
+
         f fs _       = const fs
     parseJSON _ = errorL "Error parsing Fileset"
 
@@ -289,149 +292,77 @@ isLocal bnd =
     bnd^.source.hostName == bnd^.target.hostName
     || bnd^.source.hostName `elem` bnd^.target.hostAliases
 
-data StorePath
-    = NoPath
-    | Pathname { unPathname :: FilePath }
-    | ZfsFilesystem FilePath
-    | ZfsSnapshot FilePath Int
-    | ZfsSnapshotRange FilePath Int Int
-    deriving (Show, Eq)
-
-makePrisms ''StorePath
-
-data FullPath
-    = LocalPath StorePath
-    | RemotePath Host StorePath
-    deriving (Show, Eq)
-
-makePrisms ''FullPath
+targetHost :: Binding -> Maybe Host
+targetHost bnd | isLocal bnd = Nothing
+               | otherwise   = Just (bnd^.target)
 
 main :: IO ()
-main = execParser opts >>= \o ->
-    withOptions o execute `finally` stopGlobalPool
+main = withStdoutLogging $ do
+    opts <- execParser optsDef
+
+    when (dryRun opts || noSync opts) $
+        warn' "`--dryrun' specified, no changes will be made!"
+
+    _ <- GHC.Conc.setNumCapabilities (jobs opts)
+
+    setLogLevel $ if verbose opts then LevelDebug else LevelInfo
+    setLogTimeFormat "%H:%M:%S"
+
+    hosts <- readHostsFile
+    execute opts hosts `finally` stopGlobalPool
   where
-    opts = info
+    optsDef = info
         (helper <*> pushmeOpts)
         (fullDesc <> progDesc "" <> header pushmeSummary)
 
-    withOptions :: Options -> (Options -> Map Text Host -> IO ()) -> IO ()
-    withOptions o go = withStdoutLogging $ do
-        _ <- GHC.Conc.setNumCapabilities (jobs o)
-        setLogLevel $ if verbose o then LevelDebug else LevelInfo
-        setLogTimeFormat "%H:%M:%S"
-        withStore "main" $ do
-            putValue "main" "opts" o
-            when (dryRun o || noSync o) $
-                warn' "`--dryrun' specified, no changes will be made!"
-            hostsFile <- getHomePath (".pushme" </> "hosts")
-            exists <- isFile hostsFile
-            if exists
-                then do
-                    hosts <- runResourceT $ sourceFile hostsFile
-                        =$ linesUnboundedC
-                        =$ mapC (\l ->
-                                  let (x:xs) = map pack (words l)
-                                      h = Host x xs
-                                  in (x,h) : map (,h) xs)
-                        $$ sinkList
-                    go o (M.fromList (reverse (concat hosts)))
-                else go o mempty
-
-    execute :: Options -> Map Text Host -> IO ()
-    execute o hosts = do
-        confD <- getHomePath (".pushme" </> "conf.d")
-        exists <- isDirectory confD
-        unless exists $
-            errorL $ "Please define filesets, "
-                <> "using the pattern ~/.pushme/conf.d/<name>.yml"
-        fsets <- fmap (M.fromList . map ((^.fsName) &&& id))
-            $ runResourceT
-            $ sourceDirectory confD
-                $= filterC (\n -> extension n == Just "yml")
-                $= mapMC (liftIO . (readDataFile :: FilePath -> IO Fileset))
+readHostsFile :: IO (Map Text Host)
+readHostsFile = do
+    hostsFile <- getHomePath (".pushme" </> "hosts")
+    exists <- isFile hostsFile
+    if exists
+        then do
+            hosts <- runResourceT $ sourceFile hostsFile
+                =$ linesUnboundedC
+                =$ mapC (\l ->
+                          let (x:xs) = map pack (words l)
+                              h = Host x xs
+                          in (x,h) : map (,h) xs)
                 $$ sinkList
-        thisHost <- T.init <$> shelly (silently $ cmd "hostname")
-        let here = hosts
-                ^. at thisHost
-                 . non (Host (pack (fromName o)) [])
-                 . hostName
-        when (T.null here) $
-            errorL "Please identify the current host using --from"
-        let bindings = relevantBindings o here hosts fsets
-        annotated <- mapM (shelly . annotateBinding) bindings
-        parallel_ $ map (shelly . applyBinding) annotated
-      where
-        readDataFile :: FromJSON a => FilePath -> IO a
-        readDataFile p = do
-            d  <- Data.Yaml.decode <$> B.readFile (encodeString p)
-            case d of
-                Nothing -> errorL $ "Failed to read file " <> toTextIgnore p
-                Just d' -> return d'
+            return $ M.fromList (concat hosts)
+        else
+            return mempty
 
-        applyBinding :: Binding -> Sh ()
-        applyBinding bnd
-            | dump o = liftIO $ printBinding bnd
-            | bnd^.bindCommand == BindingSnapshot = snapshotBinding bnd
-            | otherwise = syncBinding o bnd
+readDataFile :: FromJSON a => FilePath -> IO a
+readDataFile p = do
+    d  <- Data.Yaml.decode <$> B.readFile (encodeString p)
+    case d of
+        Nothing -> errorL $ "Failed to read file " <> toTextIgnore p
+        Just d' -> return d'
 
-printBinding :: Binding -> IO ()
-printBinding bnd = do
-    go (bnd^.fileset) (bnd^.this)
-    go (bnd^.fileset) (bnd^.that)
-  where
-    go fs c = putStrLn $ printf "%-12s %s"
-        (unpack (fs^.fsName)) (show (c^.schemes))
+execute :: Options -> Map Text Host -> IO ()
+execute opts hosts = do
+    confD <- getHomePath (".pushme" </> "conf.d")
+    exists <- isDirectory confD
+    unless exists $
+        errorL $ "Please define filesets, "
+            <> "using files named ~/.pushme/conf.d/<name>.yml"
 
-snapshotBinding :: Binding -> Sh ()
-snapshotBinding bnd =
-    createSnapshot (isLocal bnd) (bnd^.target) (bnd^.that)
-  where
-    createSnapshot :: Bool -> Host -> Store -> Sh ()
-    createSnapshot isLocal' targ ((^? zfsScheme) -> Just z) = do
-        let nextRev      = z^.zfsLastRev.non 1.to succ
-            thatSnapshot = z^.zfsPoolPath <> "@" <> decodeString (show nextRev)
-            snapCmd      =
-                map toTextIgnore $ ["zfs", "snapshot"] <> [thatSnapshot]
-        liftIO $ log' $ format "Creating snapshot {}"
-            [toTextIgnore thatSnapshot]
-        if isLocal'
-            then vrun_ "sudo" snapCmd
-            else remote vrun_ targ snapCmd
-    createSnapshot _ _ _ = return ()
+    fsets <- fmap (M.fromList . map ((^.fsName) &&& id))
+        $ runResourceT
+        $ sourceDirectory confD
+            $= filterC (\n -> extension n == Just "yml")
+            $= mapMC (liftIO . (readDataFile :: FilePath -> IO Fileset))
+            $$ sinkList
 
-syncBinding :: Options -> Binding -> Sh ()
-syncBinding opts bnd = do
-    when (bnd^.fileset.fsReportMissing) $
-        liftIO $ reportMissingFiles (bnd^.fileset) (bnd^.this)
-    syncStores opts bnd
+    thisHost <- T.init <$> shelly (silently $ cmd "hostname")
+    let dflt = Host (pack (fromName opts)) []
+        here = hosts^.at thisHost.non dflt.hostName
+    when (T.null here) $
+        errorL "Please identify the current host using --from"
 
-annotateBinding :: Binding -> Sh Binding
-annotateBinding bnd =
-    case (bnd^?this.zfsScheme, bnd^?that.zfsScheme) of
-        (Just z1, Just z2)  -> do
-            thisInfo' <- annotateInfo (bnd^.this) z1
-            thatInfo' <- annotateInfo (bnd^.that) z2
-            return $ this .~ thisInfo'
-                   $ that .~ thatInfo' $ bnd
-        _ -> return bnd
-  where
-    annotateInfo :: Store -> Zfs -> Sh Store
-    annotateInfo c z = fmap (fromMaybe c) $ runMaybeT $ do
-        rev <- MaybeT $ getLastRev z
-        return $ c & schemes.traverse._SchemeZfs.zfsLastRev .~ Just rev
-
-    getLastRev :: Zfs -> Sh (Maybe Int)
-    getLastRev z = silently $ do
-        let p = (z^.zfsPath) </> ".zfs" </> "snapshot"
-            h = bnd^.target
-        fmap lastMay
-              $ sort
-            <$> map (read . unpack)
-            <$> filter (T.all isDigit)
-            <$> T.lines
-            <$> if isLocal bnd
-                then vrun "ls" ["-1", toTextIgnore p]
-                else remote vrun h ["ls", "-1", toTextIgnore p]
+    parallel_
+        $ map (applyBinding opts)
+        $ relevantBindings opts here hosts fsets
 
 relevantBindings :: Options -> Text -> Map Text Host -> Map Text Fileset
                  -> [Binding]
@@ -473,17 +404,220 @@ relevantBindings opts thisHost hosts fsets
                       then BindingSnapshot
                       else BindingSync)
 
-reportMissingFiles :: Fileset -> Store -> IO ()
-reportMissingFiles fs cont =
-    runResourceT $ sourceDirectory contPath
+applyBinding :: Options -> Binding -> IO ()
+applyBinding opts bnd
+    | dump opts =
+        printBinding bnd
+    | bnd^.bindCommand == BindingSnapshot =
+        shelly $ snapshotBinding opts bnd
+    | otherwise =
+        shelly $ syncBinding opts bnd
+
+printBinding :: Binding -> IO ()
+printBinding bnd = do
+    go (bnd^.fileset) (bnd^.this)
+    go (bnd^.fileset) (bnd^.that)
+  where
+    go fs c = putStrLn $ printf "%-12s %s"
+        (unpack (fs^.fsName)) (show (c^.schemes))
+
+snapshotBinding :: Options -> Binding -> Sh ()
+snapshotBinding opts bnd@((^? that.zfsScheme) -> Just z) = do
+    mrev <- determineLastRev opts (targetHost bnd) z
+    let nextRev      = maybe 1 succ mrev
+        thatSnapshot = z^.zfsPoolPath <> "@" <> decodeString (show nextRev)
+        snapCmd      =
+            map toTextIgnore $ ["zfs", "snapshot"] <> [thatSnapshot]
+    liftIO $ log' $ format "Creating snapshot {}"
+        [toTextIgnore thatSnapshot]
+    if isLocal bnd
+        then drun_ opts "sudo" snapCmd
+        else remote opts drun_  (bnd^.target) snapCmd
+snapshotBinding _ _ = return ()
+
+syncBinding :: Options -> Binding -> Sh ()
+syncBinding opts bnd = errExit False $ do
+    liftIO $ log' $ format "Sending {}/{} -> {}"
+        [ bnd^.source.hostName
+        , bnd^.fileset.fsName
+        , bnd^.target.hostName
+        ]
+    syncStores opts bnd (bnd^.this) (bnd^.that)
+
+syncStores :: Options -> Binding -> Store -> Store -> Sh ()
+syncStores opts bnd ((^? annexScheme) -> Just a1) ((^? annexScheme) -> Just a2) =
+    syncAnnexSchemes opts bnd a1 a2
+syncStores opts bnd ((^? zfsScheme) -> Just z1) ((^? zfsScheme) -> Just z2) =
+    syncZfsSchemes opts bnd z1 z2
+syncStores opts bnd s1 s2 = syncUsingRsync opts bnd s1 s2
+
+syncAnnexSchemes :: Options -> Binding -> Annex -> Annex -> Sh ()
+syncAnnexSchemes opts bnd a1 a2 =
+    (if isLocal bnd then id else escaping False)
+        $ (if verbose opts then id else silently)
+        $ chdir (a1^.annexPath) go
+  where
+    verb = verbose opts
+    annexTarget = a2^.annexName.non (bnd^.target.hostName)
+    go = do
+        drun_ opts "git-annex" $ ["-q" | not verb]
+            <> ["add", "-c", "alwayscommit=false", "."]
+        drun_ opts "git-annex" $ ["-q" | not verb]
+            <> [ "--auto"
+               | not (a2^.annexIsPrimary || copyAll opts) ]
+            <> [ "copy", "-c", "alwayscommit=false" ]
+            <> [ "--not", "--in", annexTarget ]
+            <> a1^.annexFlags
+            <> [ "--to", annexTarget ]
+        drun_ opts "git-annex" $ ["-q" | not verb] <> ["sync"]
+
+        if isLocal bnd
+            then chdir (a2^.annexPath) $
+                drun_ opts "git-annex" $ ["-q" | not verb] <> ["sync"]
+            else remote opts drun_ (bnd^.target)
+                [ T.concat
+                      $ [ "\"cd '"
+                        , toTextIgnore (a2^.annexPath)
+                        , "'; git-annex"
+                        ]
+                     <> [" -q" | not verb]
+                     <> [" sync", "\""]
+                ]
+
+        liftIO $ log' $ format "{}: Git Annex synchronized"
+            [ bnd^.fileset.fsName ]
+
+syncZfsSchemes :: Options -> Binding -> Zfs -> Zfs -> Sh ()
+syncZfsSchemes opts bnd z1 z2 = do
+    rev1 <- determineLastRev opts Nothing z1
+    rev2 <- determineLastRev opts (targetHost bnd) z2
+    let p = z1^.zfsPoolPath
+        r = z2^.zfsPoolPath
+        msendArgs = case (rev1, rev2) of
+            (Just thisRev, Just thatRev) ->
+                if thisRev > thatRev
+                then Just $ localSendTwoRevs p thatRev thisRev
+                else Nothing
+            (Just thisRev, Nothing) ->
+                Just $ localSendRev p thisRev
+            (Nothing, _) ->
+                Just $ localSend (toTextIgnore p)
+        recvCmd = case mtarg of
+            Nothing -> localReceive (toTextIgnore r)
+            Just h  -> remoteReceive h (toTextIgnore r)
+
+    case msendArgs of
+        Nothing -> liftIO $ warn "Remote has newer snapshot revision"
+        Just sendArgs -> do
+            liftIO $ debug' $ T.intercalate " " sendArgs
+            recvArgs <- recvCmd
+            if null recvArgs
+                then drun_ opts (fromText (head sendArgs)) (tail sendArgs)
+                else escaping False
+                    $ drun_ opts (fromText (head sendArgs))
+                    $ tail sendArgs <> ["|"] <> recvArgs
+  where
+    mtarg = targetHost bnd
+
+    localSend pool = ["sudo", "zfs", "send"] <> [pool]
+
+    localSendRev poolPath r1 =
+           ["sudo", "zfs", "send"]
+        <> ["-v" | verbose opts]
+        <> [ toTextIgnore poolPath <> "@" <> tshow r1 ]
+
+    localSendTwoRevs poolPath r1 r2 =
+           ["sudo", "zfs", "send"]
+        <> ["-v" | verbose opts]
+        <> [ "-I"
+           , toTextIgnore poolPath <> "@" <> tshow r1
+           , toTextIgnore poolPath <> "@" <> tshow r2
+           ]
+
+    localReceive pool = return $ ["sudo", "zfs", "recv"] <> ["-F", pool]
+
+    remoteReceive h pool =
+        remote opts (\_ x xs -> return (toTextIgnore x:xs)) h  $
+            ["zfs", "recv"] <> ["-F", pool ]
+
+determineLastRev :: Options -> Maybe Host -> Zfs -> Sh (Maybe Int)
+determineLastRev opts mhost zfs = silently $ do
+    let p = (zfs^.zfsPath) </> ".zfs" </> "snapshot"
+    fmap lastMay
+          $ sort
+        <$> map (read . unpack)
+        <$> filter (T.all isDigit)
+        <$> T.lines
+        <$> case mhost of
+            Nothing -> drun opts "ls" ["-1", toTextIgnore p]
+            Just h  -> remote opts drun h ["ls", "-1", toTextIgnore p]
+
+syncUsingRsync :: Options -> Binding -> Store -> Store -> Sh ()
+syncUsingRsync opts bnd s1 s2 =
+    rsync
+        opts
+        (bnd^.fileset)
+        (fromMaybe (defaultRsync l) (s1^?rsyncScheme))
+        l
+        (fromMaybe (defaultRsync r) (s2^?rsyncScheme))
+        (case h of
+              Nothing   -> toTextIgnore r
+              Just targ -> format "{}:{}" [targ, escape (toTextIgnore r)])
+  where
+    h = case targetHost bnd of
+        Nothing   -> Nothing
+        Just targ
+            | Just n <- s2^?rsyncScheme.rsyncName -> n
+            | otherwise -> Just (targ^.hostName)
+
+    Just (asDirectory -> l)
+        =   (s1^?rsyncScheme.rsyncPath)
+        <|> (s1^?zfsScheme.zfsPath)
+        <|> (s1^?annexScheme.annexPath)
+        <|> errorL ("Could not find path for "
+                    <> (bnd^.source.hostName) <> "/" <> (bnd^.fileset.fsName))
+
+    Just (asDirectory -> r)
+        =   (s2^?rsyncScheme.rsyncPath)
+        <|> (s2^?zfsScheme.zfsPath)
+        <|> (s2^?annexScheme.annexPath)
+        <|> errorL ("Could not find path for "
+                    <> (bnd^.target.hostName) <> "/" <> (bnd^.fileset.fsName))
+
+rsync :: Options -> Fileset -> Rsync -> FilePath -> Rsync -> Text -> Sh ()
+rsync opts fs srcRsync src destRsync dest = do
+    let rfs = (srcRsync^.rsyncFilters) <> (destRsync^.rsyncFilters)
+    case rfs of
+        [] -> doRsync opts (fs^.fsName) [] (toTextIgnore src) dest
+
+        filters -> withTmpDir $ \p -> do
+            let fpath = p </> "filters"
+            writefile fpath (T.unlines filters)
+
+            when (srcRsync^.rsyncReportMissing) $
+                liftIO $ reportMissingFiles fs srcRsync
+
+            doRsync
+                opts
+                (fs^.fsName)
+                ["--include-from=" <> toTextIgnore fpath]
+                (toTextIgnore src)
+                dest
+
+reportMissingFiles :: Fileset -> Rsync -> IO ()
+reportMissingFiles fs r =
+    runResourceT $ sourceDirectory rpath
         =$ mapC (T.drop len . toTextIgnore)
         =$ filterC (\x -> not (any (patMatch x) patterns))
         =$ filterC (`notElem` [ ".DS_Store", ".localized" ])
         $$ mapM_C (\f -> warn' $ format "{}: unknown: \"{}\"" [label, f])
   where
-    contPath = unPathname . getPathname $ cont^.rsyncScheme.rsyncPath
-    len      = T.length (toTextIgnore contPath)
-    filters  = cont^.rsyncScheme.rsyncFilters
+    label   = fs^.fsName
+    rpath   = r^.rsyncPath
+    len     = T.length (toTextIgnore rpath)
+    filters = r^.rsyncFilters
+
+    patMatch f p = unpack f =~ unpack p
 
     patterns
         = map regexToGlob
@@ -502,262 +636,14 @@ reportMissingFiles fs cont =
         . T.replace "?" "."
         . T.replace "." "\\."
 
-    patMatch f p = unpack f =~ unpack p
-
-    label = fs^.fsName
-
-getHomePath :: FilePath -> IO FilePath
-getHomePath p = (</> p) <$> getHomeDirectory
-
-getPathname :: FilePath -> StorePath
-getPathname (toTextIgnore -> fp) =
-    Pathname $ fromText $ if T.null fp || T.last fp /= '/'
-                          then T.append fp "/"
-                          else fp
-
-sourcePath :: Binding -> FullPath
-sourcePath bnd =
-    case (bnd^?this.zfsScheme, bnd^?that.zfsScheme) of
-        (Just z1, Just z2)  ->
-            let p = z1^.zfsPoolPath
-            in case (z1^.zfsLastRev, z2^.zfsLastRev) of
-                (Just thisRev, Just thatRev) ->
-                    LocalPath $
-                        if thisRev > thatRev
-                        then ZfsSnapshotRange p thatRev thisRev
-                        else NoPath
-                (Just thisRev, Nothing) ->
-                    LocalPath $ ZfsSnapshot p thisRev
-                (Nothing, _) ->
-                    LocalPath $ ZfsFilesystem p
-        (Just z1, Nothing)  ->
-            LocalPath $ Pathname $ z1^.zfsPath
-        _ ->
-            case bnd^?this.annexScheme of
-                Just annex ->
-                    LocalPath $ getPathname $ annex^.annexPath
-                Nothing ->
-                    case bnd^?this.rsyncScheme of
-                        Just rsync ->
-                            LocalPath $ getPathname $ rsync^.rsyncPath
-                        Nothing ->
-                            LocalPath NoPath
-
-destinationPath :: Binding -> FullPath
-destinationPath bnd =
-    case (bnd^?this.zfsScheme, bnd^?that.zfsScheme) of
-        (Just _, Just z2)  ->
-            buildPath $ ZfsFilesystem (z2^.zfsPoolPath)
-        (Nothing, Just z2)  ->
-            buildPath $ Pathname $ z2^.zfsPath
-        _ -> case bnd^?that.annexScheme of
-            Just annex ->
-                buildPath $ getPathname $ annex^.annexPath
-            Nothing ->
-                case bnd^?that.rsyncScheme of
-                    Just rsync ->
-                        buildPath $ getPathname $ rsync^.rsyncPath
-                    Nothing ->
-                        buildPath NoPath
-  where
-    buildPath
-        | isLocal bnd = LocalPath
-        | otherwise   = RemotePath (bnd^.target)
-
-syncStores :: Options -> Binding -> Sh ()
-syncStores opts bnd = errExit False $ do
-    liftIO $ log' $ format "Sending {}/{} -> {}"
-        [ bnd^.source.hostName
-        , bnd^.fileset.fsName
-        , bnd^.target.hostName
-        ]
-    let (sendCmd, recvCmd) = getSyncCommands opts bnd
-    sendArgs <- sendCmd
-    unless (null sendArgs) $ do
-        liftIO $ log' $ T.intercalate " " sendArgs
-        recvArgs <- recvCmd
-        if null recvArgs
-            then vrun_ (fromText (head sendArgs)) (tail sendArgs)
-            else escaping False
-                $ vrun_ (fromText (head sendArgs))
-                $ tail sendArgs <> ["|"] <> recvArgs
-
-getSyncCommands :: Options -> Binding -> (Sh [Text], Sh [Text])
-getSyncCommands opts bnd =
-  let verb  = verbose opts
-      cpAll = copyAll opts
-
-      thisCont  = bnd^.this
-      thatCont  = bnd^.that
-      thisAnnex = thisCont^.singular annexScheme
-      thatAnnex = thatCont^.singular annexScheme
-
-      annexTarget = thatAnnex^.annexName.non (bnd^.target.hostName)
-      defaultFlags = [ "--not", "--in", annexTarget ]
-      hostAFlags = lookup (bnd^.target.hostName) (thisAnnex^.annexFlags)
-      annexFlags' =
-          flip (maybe defaultFlags) hostAFlags $ \flags ->
-              fromMaybe (fromMaybe defaultFlags $ lookup "<default>" flags)
-                  $ lookup (bnd^.fileset.fsName) flags
-
-      annexCmds isRemote path' = do
-          vrun_ "git-annex" $ ["-q" | not verb]
-              <> ["add", "-c", "alwayscommit=false", "."]
-          vrun_ "git-annex" $ ["-q" | not verb]
-              <> [ "--auto" | not (orOf annexIsPrimary thatAnnex || cpAll) ]
-              <> [ "copy", "-c", "alwayscommit=false" ]
-              <> annexFlags'
-              <> [ "--to", annexTarget ]
-          vrun_ "git-annex" $ ["-q" | not verb] <> ["sync"]
-
-          sub $
-              if isRemote
-              then remote vrun_ (bnd^.target)
-                  [ T.concat
-                        $ [ "\"cd '", path', "'; git-annex" ]
-                       <> [" -q" | not verb]
-                       <> [" sync", "\""]
-                  ]
-              else do
-                  cd (fromText path')
-                  vrun_ "git-annex" $ ["-q" | not verb] <> ["sync"]
-
-          liftIO $ log' $ format "{}: Git Annex synchronized"
-              [ bnd^.fileset.fsName ]
-
-  in case (sourcePath bnd, destinationPath bnd) of
-    (LocalPath NoPath, _) ->
-        ( do liftIO $ log' "No sync needed"
-             return []
-        , return []
-        )
-
-    (LocalPath (Pathname l), LocalPath (Pathname r)) ->
-        ( if   isJust (thisCont^?annexScheme)
-             && isJust (thatCont^?annexScheme)
-          then (if verb then id else silently)
-              $ chdir l
-              $ do
-                  annexCmds False (toTextIgnore r)
-                  return []
-          else do
-              withFilters
-                  (bnd^.fileset)
-                  (thisCont^.singular rsyncScheme)
-                  l
-                  (thatCont^.singular rsyncScheme)
-                  (toTextIgnore r)
-              return []
-        , return []
-        )
-
-    (LocalPath (Pathname l), RemotePath h (Pathname r)) ->
-        ( if   isJust (thisCont^?annexScheme)
-             && isJust (thatCont^?annexScheme)
-          then escaping False
-              $ (if verb then id else silently)
-              $ chdir l
-              $ do
-                  annexCmds True (toTextIgnore r)
-                  return []
-          else do
-              let targ = fromMaybe (h^.hostName)
-                       $ thatCont^.rsyncScheme.rsyncName
-              withFilters
-                  (bnd^.fileset)
-                  (thisCont^.singular rsyncScheme)
-                  l
-                  (thatCont^.singular rsyncScheme)
-                  (format "{}:{}" [targ, escape (toTextIgnore r)])
-              return []
-        , return []
-        )
-
-    (LocalPath (ZfsFilesystem l), LocalPath (ZfsFilesystem r)) ->
-        ( localSend (toTextIgnore l)
-        , localReceive (toTextIgnore r)
-        )
-
-    (LocalPath (ZfsFilesystem l), RemotePath h (ZfsFilesystem r)) ->
-        ( localSend (toTextIgnore l)
-        , remoteReceive h (toTextIgnore r)
-        )
-
-    (LocalPath (ZfsSnapshot l e), LocalPath (ZfsFilesystem r)) ->
-        ( localSendRev l e
-        , localReceive (toTextIgnore r)
-        )
-
-    (LocalPath (ZfsSnapshot l e), RemotePath h (ZfsFilesystem r)) ->
-        ( localSendRev l e
-        , remoteReceive h (toTextIgnore r)
-        )
-
-    (LocalPath (ZfsSnapshotRange l b e), LocalPath (ZfsFilesystem r)) ->
-        ( localSendTwoRevs l b e
-        , localReceive (toTextIgnore r)
-        )
-
-    (LocalPath (ZfsSnapshotRange l b e), RemotePath h (ZfsFilesystem r)) ->
-        ( localSendTwoRevs l b e
-        , remoteReceive h (toTextIgnore r)
-        )
-
-    (l, r) -> errorL $ format "Unexpected paths {} and {}"
-        [ pack (show l), pack (show r) ]
-
-  where
-    escape x
-        | "\"" `T.isInfixOf` x || " " `T.isInfixOf` x =
-            "'" <> T.replace "\"" "\\\"" x <> "'"
-        | otherwise =  x
-
-    localSend pool = return $ ["sudo", "zfs", "send"] <> [pool]
-
-    localSendRev poolPath r1 = do
-        verb <- getOption verbose
-        return $ ["sudo", "zfs", "send"]
-                 <> ["-v" | verb]
-                 <> [ toTextIgnore poolPath <> "@" <> tshow r1 ]
-
-    localSendTwoRevs poolPath r1 r2 = do
-        verb <- getOption verbose
-        return $ ["sudo", "zfs", "send"]
-                 <> ["-v" | verb]
-                 <> [ "-I"
-                    , toTextIgnore poolPath <> "@" <> tshow r1
-                    , toTextIgnore poolPath <> "@" <> tshow r2 ]
-
-    localReceive pool = return $ ["sudo", "zfs", "recv"] <> ["-F", pool]
-
-    remoteReceive h pool =
-        remote (\x xs -> return (toTextIgnore x:xs)) h  $
-               ["zfs", "recv"] <> ["-F", pool ]
-
-withFilters :: Fileset -> Rsync -> FilePath -> Rsync -> Text -> Sh ()
-withFilters fs srcRsync src destRsync dest = do
-    let rfs = (srcRsync^.rsyncFilters) <> (destRsync^.rsyncFilters)
-    case rfs of
-        [] -> rsyncCopy (fs^.fsName) [] (toTextIgnore src) dest
-        filters ->
-            liftIO $ withSystemTempFile "rsync" $ \p h -> do
-                forM_ filters $ hPutStrLn h . unpack
-                hClose h
-                shelly $ rsyncCopy (fs^.fsName)
-                    ["--include-from=" <> pack p]
-                    (toTextIgnore src) dest
-
-rsyncCopy :: Text -> [Text] -> Text -> Text -> Sh ()
-rsyncCopy label options src dest = do
-    -- liftIO $ log' $ format "{} -> {}" [src, dest]
-
-    dry    <- getOption dryRun
-    noSy   <- getOption noSync
-    verb   <- getOption verbose
-    den    <- (\x -> if x then 1000 else 1024) <$> getOption siUnits
-    sshCmd <- getOption ssh
-
-    let shhh     = not verb
+doRsync :: Options -> Text -> [Text] -> Text -> Text -> Sh ()
+doRsync opts label options src dest = do
+    let dry      = dryRun opts
+        noSy     = noSync opts
+        verb     = verbose opts
+        den      = (\x -> if x then 1000 else 1024) $ siUnits opts
+        sshCmd   = ssh opts
+        shhh     = not verb
         toRemote = ":" `T.isInfixOf` dest
         options' =
             [ "-aHEy"               -- jww (2012-09-23): maybe -A too?
@@ -783,7 +669,6 @@ rsyncCopy label options src dest = do
             , "--filter=-p .AppleDesktop/"
             , "--filter=-p .com.apple.timemachine.supported"
             ]
-
             <> (if not (null sshCmd)
                 then ["--rsh", pack sshCmd]
                 else [])
@@ -794,32 +679,31 @@ rsyncCopy label options src dest = do
             <> options
             <> [src, dest]
 
-    rsync <- which "rsync"
-    case rsync of
+    rsyncCmd <- which "rsync"
+    case rsyncCmd of
         Nothing -> errorL "Could not find rsync!"
         Just r
             | shhh && not noSy -> silently $ runRsync r toRemote options' den
-            | otherwise     -> doCopy drun_ r toRemote True options'
+            | otherwise     -> doCopy (drun_ opts) r toRemote options'
 
   where
-    commaSep :: Int -> Text
-    commaSep = fst
-        . T.foldr (\x (xs, num :: Int) ->
-                    if num /= 0 && num `mod` 3 == 0
-                    then (x `T.cons` ',' `T.cons` xs, num + 1)
-                    else (x `T.cons` xs, num + 1)) ("", 0)
-        . tshow
+    doCopy f r False os = f "sudo" (toTextIgnore r:os)
+    doCopy f r True os  = asRoot f r (remoteRsync True r:os)
+      where
+        remoteRsync useSudo' _ = if useSudo'
+                                 then "--rsync-path=sudo rsync"
+                                 else "--rsync-path=rsync"
 
-    field :: Text -> M.Map Text Text -> Maybe Integer
-    field x stats = read . unpack <$> M.lookup x stats
-
-    doCopy f rsync False False os = f rsync os
-    doCopy f rsync False True os  = sudo f rsync os
-    doCopy f rsync True False os  = f rsync (remoteRsync False rsync:os)
-    doCopy f rsync True True os   = asRoot f rsync (remoteRsync True rsync:os)
+        asRoot :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
+        asRoot k p xs =
+            k "sudo" [ "su", "-", "root", "-c"
+                     , T.unwords (map (\x -> "\"" <> x <> "\"") xs')
+                     ]
+          where
+            xs' = toTextIgnore p:xs
 
     runRsync r toRemote os den = do
-        output <- doCopy drun r toRemote True os
+        output <- doCopy (drun opts) r toRemote os
         let stats = M.fromList
                 $ map (fmap (T.filter (/= ',') . (!! 1) . T.words)
                            . T.breakOn ": ")
@@ -839,24 +723,21 @@ rsyncCopy label options src dest = do
             , humanReadable den (fromMaybe 0 total)
             , commaSep (fromIntegral (fromMaybe 0 files))
             ]
+      where
+        field :: Text -> M.Map Text Text -> Maybe Integer
+        field x stats = read . unpack <$> M.lookup x stats
 
-    remoteRsync useSudo' _ = if useSudo'
-                             then "--rsync-path=sudo rsync"
-                             else "--rsync-path=rsync"
+        commaSep :: Int -> Text
+        commaSep = fst
+            . T.foldr (\x (xs, num :: Int) ->
+                        if num /= 0 && num `mod` 3 == 0
+                        then (x `T.cons` ',' `T.cons` xs, num + 1)
+                        else (x `T.cons` xs, num + 1)) ("", 0)
+            . tshow
 
-    asRoot :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
-    asRoot f p xs =
-        f "sudo" [ "su", "-", "root", "-c"
-                 , T.unwords (map (\x -> "\"" <> x <> "\"") xs')
-                 ]
-        where xs' = toTextIgnore p:xs
-
-    sudo :: (FilePath -> [Text] -> Sh a) -> FilePath -> [Text] -> Sh a
-    sudo f p xs = f "sudo" (toTextIgnore p:xs)
-
-remote :: (FilePath -> [Text] -> Sh a) -> Host -> [Text] -> Sh a
-remote f host xs = do
-    sshCmd <- getOption ssh
+remote :: Options -> (Options -> FilePath -> [Text] -> Sh a) -> Host -> [Text] -> Sh a
+remote opts f host xs = do
+    let sshCmd = ssh opts
     p <- if null sshCmd
         then which "ssh"
         else return $ Just (decodeString sshCmd)
@@ -864,39 +745,40 @@ remote f host xs = do
         Nothing -> errorL "Could not find ssh!"
         Just r  ->
             let ys = T.words (toTextIgnore r) <> [host^.hostName] <> xs
-            in f (fromText (head ys)) (tail ys)
+            in f opts (fromText (head ys)) (tail ys)
 
-doRun :: (FilePath -> [Text] -> Sh a)
-      -> (Text -> Sh ())
+doRun :: Options
+      -> (FilePath -> [Text] -> Sh a)
       -> Sh a
-      -> Bool
       -> FilePath
       -> [Text]
       -> Sh a
-doRun f logf retval heedDry n xs = do
-    logf $ format "{} {}" [toTextIgnore n, T.unwords xs]
-    dry   <- getOption dryRun
-    drier <- getOption noSync
-    if drier || (dry && heedDry)
+doRun opts f retval n xs = do
+    liftIO $ debug' $ format "{} {}" [toTextIgnore n, T.unwords xs]
+    if dryRun opts || noSync opts
         then retval
         else f n xs
 
-drun :: FilePath -> [Text] -> Sh Text
-drun = doRun run (liftIO . debug') (return "") False
+drun :: Options -> FilePath -> [Text] -> Sh Text
+drun opts = doRun opts run (return "")
 
-drun_ :: FilePath -> [Text] -> Sh ()
-drun_ = (void .) . doRun run_ (liftIO . debug') (return ()) False
+drun_ :: Options -> FilePath -> [Text] -> Sh ()
+drun_ opts = (void .) . doRun opts run_ (return ())
 
-vrun :: FilePath -> [Text] -> Sh Text
-vrun = doRun run (liftIO . log') (return "") True
+getHomePath :: FilePath -> IO FilePath
+getHomePath p = (</> p) <$> getHomeDirectory
 
-vrun_ :: FilePath -> [Text] -> Sh ()
-vrun_ = (void .) . doRun run_ (liftIO . log') (return ()) True
+asDirectory :: FilePath -> FilePath
+asDirectory (toTextIgnore -> fp) =
+    fromText $ if T.null fp || T.last fp /= '/'
+               then T.append fp "/"
+               else fp
 
-getOption :: Data a => (a -> b) -> Sh b
-getOption opt = liftIO $ do
-    opts <- getValue "main" "opts"
-    return $ fromJust $ opt <$> opts
+escape :: Text -> Text
+escape x
+    | "\"" `T.isInfixOf` x || " " `T.isInfixOf` x =
+        "'" <> T.replace "\"" "\\\"" x <> "'"
+    | otherwise = x
 
 matchText :: Text -> Text -> Bool
 matchText = flip (=~) `on` unpack
