@@ -1,0 +1,25 @@
+Name:     'Library'
+Priority: 30
+Class:    'system,sync'
+
+Stores:
+  hermes:
+    Path: /Library
+  
+  titan:
+    Rsync:
+      Path: /tank/Backups/System/Library
+
+Options:
+  Rsync:
+    Filters:
+      - '- /Application Support/Apple/ParentalControls/'
+      - '- /Application Support/CrashPlan/.identity'
+      - '- /Application Support/VMware/usbarb.rules'
+      - '- /Application Support/com.apple.TCC'
+      - '- /Caches/'
+      - '- /DropboxHelperTools/'
+      - '- /Logs/'
+      - '- /Preferences/OpenDirectory/'
+      - '- /Preferences/com.apple.apsd.plist'
+      - '- /Security/'

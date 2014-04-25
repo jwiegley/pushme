@@ -23,6 +23,8 @@
 - /Contextual Menu Items/
 - /Cookies/
 - /Developer/
++ /Dictionaries/
++ /Dovecot/
 + /DxO Optics Pro/
 - /EditMilestones/
 - /Facebook/
@@ -34,6 +36,8 @@
 - /GameKit/
 - /Google/
 + /GIMP/
++ /Haskell/
++ /Hoogle/
 - /Icons/
 - /Images/
 + /Info/
@@ -51,16 +55,19 @@
 + /Lisp/
 - /Logs/
 + /MacPorts/
-+ /Mail Downloads/
-+ /Mail/
+- /Mail Downloads/
+- /Mail/
 + /Messages/
 - /Metadata/
++ /Mirrors/
 - /Mobile Documents/
 + /Mozilla/
++ /Nix/
 - /Opera/
 + /PDF Services/
 - /PhotoshopCrashes/
-+ /PreferencePanes/
++ /PostgreSQL/
+- /PreferencePanes/
 + /Preferences/
 + /Preferences/Acrobat/
 + /Preferences/Adobe*
@@ -95,6 +102,7 @@
 - /Screen Savers/
 + /ScriptingAdditions/
 + /Scripts/
++ /Services/
 - /Social/
 + /Sounds/
 + /Speech/

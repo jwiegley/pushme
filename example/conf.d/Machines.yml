@@ -1,0 +1,15 @@
+Name:     'Machines'
+Priority: 400
+Class:    'large,data'
+
+Stores:
+  hermes:
+    Path: /Users/johnw/Machines
+  
+  clone:
+    Rsync:
+      Path: /Volumes/Macintosh HD 1/Users/johnw/Machines
+  
+  titan:
+    Rsync:
+      Path: /tank/Data/Machines

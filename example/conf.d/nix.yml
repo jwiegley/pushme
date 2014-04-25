@@ -1,0 +1,15 @@
+Name:     'nix'
+Priority: 80
+Class:    'quick,main,sync'
+
+Stores:
+  hermes:
+    Path: /nix
+  
+  clone:
+    Rsync:
+      Path: /Volumes/Macintosh HD 1/nix
+  
+  titan:
+    Rsync:
+      Path: /tank/Backups/System/Nix

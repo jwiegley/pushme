@@ -1,0 +1,18 @@
+Name:     'Pictures'
+Priority: 130
+Class:    'large,data,annex'
+
+Stores:
+  hermes:
+    Path: /Users/johnw/Pictures
+  
+  vault:
+    Path: /Volumes/Vault/Pictures
+  
+  clone:
+    Rsync:
+      Path: /Volumes/Macintosh HD 1/Users/johnw/Pictures
+  
+  titan:
+    Rsync:
+      Path: /tank/Media/Pictures

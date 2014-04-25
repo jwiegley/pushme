@@ -1,0 +1,25 @@
+Name:     'local'
+Priority: 80
+Class:    'quick,main,sync'
+
+Stores:
+  hermes:
+    Path: /usr/local
+  
+  vault:
+    Path: /Volumes/Vault/Local
+  
+  clone:
+    Rsync:
+      Path: /Volumes/Macintosh HD 1/usr/local
+  
+  titan:
+    Rsync:
+      Path: /tank/Backups/System/Local
+
+Options:
+  Rsync:
+    Filters:
+      - '- /var/postgres/'
+      - '- /var/run/'
+      - '- /texlive/'

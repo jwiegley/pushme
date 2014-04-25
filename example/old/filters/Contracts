@@ -1,0 +1,11 @@
+- /BoostPro/
+- cabal-dev/
+- dist/
+- .hsenvs/
+- .git/annex/objects/
+- *-workdir/
+- git-repos/
+- *.db
+- *.hi
+- *.o
+- TAGS

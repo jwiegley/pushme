@@ -1,0 +1,11 @@
+Name:     'iTunes'
+Priority: 142
+Class:    'large,data,annex'
+
+Stores:
+  hermes:
+    Path: /Volumes/My Book/iTunes
+  
+  titan:
+    Rsync:
+      Path: /tank/Media/iTunes

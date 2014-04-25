@@ -1,0 +1,18 @@
+Name:     'Projects'
+Priority: 20
+Class:    'quick,main,sync'
+
+Stores:
+  hermes:
+    Path: /Users/johnw/Projects
+  
+  vault:
+    Path: /Volumes/Vault/Projects
+  
+  clone:
+    Rsync:
+      Path: /Volumes/Macintosh HD 1/Users/johnw/Projects
+  
+  titan:
+    Rsync:
+      Path: /tank/Data/Projects

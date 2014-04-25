@@ -1,0 +1,27 @@
+Name:     'Applications'
+Priority: 95
+Class:    'system,main,sync'
+
+Stores:
+  hermes:
+    Path: /Applications
+  
+  clone:
+    Rsync:
+      Path: /Volumes/Macintosh HD 1/Applications
+  
+  titan:
+    Rsync:
+      Path: /tank/Backups/System/Applications
+
+Options:
+  Rsync:
+    Filters:
+      - '+ /Games/'
+      - '+ /MacPorts/'
+      - '+ /Misc/'
+      - '+ /TeX/'
+      - '- /*'
+      - '- /*/'
+      - '- /.*'
+      - '- /.*/'

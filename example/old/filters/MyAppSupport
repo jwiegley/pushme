@@ -5,9 +5,11 @@
 + /Amazon/
 + /Aperture/
 + /AppFresh/
+- /App Store/
 + /Awaken/
 + /BibDesk/
 + /Bento/
+- /BitTorrent Sync/
 + /Blizzard/
 + /Boxer/
 + /CANON INC/
@@ -15,14 +17,19 @@
 + /Certificate Authority/
 + /ChronoSync/
 + /Citrix Receiver/
++ /Clarify/
+- /CleanMyMac/
+- /CleanMyMac 2/
 + /Colloquy/
 + /ColorSchemer/
 - /Console/
+- /ControllerMate/
 + /CrashPlan/
 + /CrashReporter/
 + /Cultured Code/
 + /DEVONagent/
 + /DEVONthink Pro 2/
++ /DEVONthink Pro Office/
 + /DEVONthink Sorter/
 + /DMI/
 + /DPP/
@@ -33,19 +40,21 @@
 + /Developer/
 + /Digiarty/
 - /Dock/
+- /Dragon/
 + /Dropzone/
 + /DxO Optics Pro/
 + /EasyFind/
 + /ExpanDrive/
 + /Expression Media/
 + /Exult/
++ /Fantastical/
 + /Firefox/
 + /Fluid/
 + /ForkLift/
 + /GarageBuy/
 + /GitHub for Mac/
 + /Google Earth/
-+ /Google/
+- /Google/
 + /Growl/
 + /HandBrake/
 + /Hazel/
@@ -59,6 +68,7 @@
 - /LaunchBar/Habits.plist
 - /Librarian/
 - /Linotype/
++ /Little Inferno/
 + /LittleSnapper/
 + /MacSword/
 + /Mactracker/
@@ -68,6 +78,7 @@
 + /Merlin/
 + /Microsoft/
 - /Microsoft/Silverlight/
++ /MindVision/
 - /MobileSync/
 + /Mozilla/
 + /MrGeckosMedia/
@@ -84,6 +95,7 @@
 - /OpenMeta/
 - /Opera/
 - /Oracle/
+- /PFU/
 + /Path Finder/
 + /Phase One Media Pro/
 + /PhoneView/
@@ -104,11 +116,12 @@
 - /SpamSieve/
 + /Speed Download/
 - /SpiceRack/
-+ /Steam/
+- /Steam/
 + /Stellarium/
 + /Sustainable Softworks/
 - /SyncServices/
 - /TechTool Pro 6/
++ /Telestream/
 + /TeX Live Utility/
 + /TextExpander/
 + /TextMate/
@@ -118,6 +131,7 @@
 + /Tunnelblick/
 + /TweetDeck/
 - /Ubiquity/
++ /VLC/
 + /VMware Fusion/
 + /Virtual []][[]/
 - /Wacom/
@@ -143,6 +157,7 @@
 + /iTerm/
 + /iWork/
 + /org.videolan.vlc/
+- /uTorrent/
 - /*
 - /*/
 - /.[A-Za-z0-9_]*

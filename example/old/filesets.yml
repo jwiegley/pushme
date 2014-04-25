@@ -5,75 +5,33 @@
   'ReportMissing': |-
     false
 - 'Priority': |-
-    96
-  'Name': 'MyApplications'
-  'Class': 'large,data'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
     160
   'Name': 'Archives'
-  'Class': 'large,data,sync'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    165
-  'Name': 'Systems'
   'Class': 'large,data,annex'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    500
-  'Name': 'Backups'
-  'Class': 'large,data,annex'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    70
-  'Name': 'Contracts'
-  'Class': 'quick,data,sync'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    70
-  'Name': 'TinyContracts'
-  'Class': 'quick,data'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    71
-  'Name': 'BoostPro'
-  'Class': 'quick,data'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    110
-  'Name': 'Databases'
-  'Class': 'large,data,sync'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    110
-  'Name': 'TinyDatabases'
-  'Class': 'large,data'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    200
-  'Name': 'DataFS'
-  'Class': 'large,data'
   'ReportMissing': |-
     false
 - 'Priority': |-
     10
+  'Name': 'Contracts'
+  'Class': 'data,sync'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    12
+  'Name': 'Dropbox'
+  'Class': 'quick,main,sync'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    12
   'Name': 'Documents'
   'Class': 'quick,main,sync'
   'ReportMissing': |-
     false
 - 'Priority': |-
-    10
-  'Name': 'TinyDocuments'
-  'Class': 'quick,main'
+    12
+  'Name': 'Databases'
+  'Class': 'quick,main,sync'
   'ReportMissing': |-
     false
 - 'Priority': |-
@@ -95,20 +53,14 @@
   'ReportMissing': |-
     false
 - 'Priority': |-
-    32
-  'Name': 'EtcParts'
-  'Class': 'system,sync'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    300
-  'Name': 'MirrorFS'
-  'Class': 'large,data'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
     40
   'Name': 'MyLibrary'
+  'Class': 'quick,main,sync'
+  'ReportMissing': |-
+    true
+- 'Priority': |-
+    40
+  'Name': 'MyLibrarySmall'
   'Class': 'quick,main,sync'
   'ReportMissing': |-
     true
@@ -125,21 +77,15 @@
   'ReportMissing': |-
     false
 - 'Priority': |-
-    50
-  'Name': 'TinyMessages'
-  'Class': 'quick,main'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    120
-  'Name': 'Mirrors'
-  'Class': 'large,data'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
     150
   'Name': 'Movies'
   'Class': 'large,data,annex'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    999
+  'Name': 'Rentals'
+  'Class': 'large,data'
   'ReportMissing': |-
     false
 - 'Priority': |-
@@ -150,20 +96,26 @@
     false
 - 'Priority': |-
     142
-  'Name': 'Music'
+  'Name': 'iTunes'
   'Class': 'large,data,annex'
   'ReportMissing': |-
     false
 - 'Priority': |-
-    141
-  'Name': 'Media'
-  'Class': large,data'
+    142
+  'Name': 'iTunesParts'
+  'Class': 'large,data,annex'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
+    130
+  'Name': 'Photos'
+  'Class': 'large,data,annex'
   'ReportMissing': |-
     false
 - 'Priority': |-
     130
   'Name': 'Pictures'
-  'Class': 'large,data'
+  'Class': 'large,data,annex'
   'ReportMissing': |-
     false
 - 'Priority': |-
@@ -173,17 +125,11 @@
   'ReportMissing': |-
     false
 - 'Priority': |-
-    20
-  'Name': 'TinyProjects'
-  'Class': 'quick,main'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
     60
   'Name': 'home'
   'Class': 'quick,main,sync'
   'ReportMissing': |-
-    true
+    false
 - 'Priority': |-
     80
   'Name': 'local'
@@ -191,20 +137,14 @@
   'ReportMissing': |-
     false
 - 'Priority': |-
+    80
+  'Name': 'nix'
+  'Class': 'quick,main,sync'
+  'ReportMissing': |-
+    false
+- 'Priority': |-
     400
   'Name': 'Machines'
-  'Class': 'large,data'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    500
-  'Name': 'Photos'
-  'Class': 'large,data,annex'
-  'ReportMissing': |-
-    false
-- 'Priority': |-
-    900
-  'Name': 'Products'
   'Class': 'large,data'
   'ReportMissing': |-
     false

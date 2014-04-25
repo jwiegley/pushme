@@ -1,0 +1,11 @@
+Name:     'Photos'
+Priority: 130
+Class:    'large,data,annex'
+
+Stores:
+  hermes:
+    Path: /Volumes/My Book/Photos
+  
+  titan:
+    Rsync:
+      Path: /tank/Media/Photos

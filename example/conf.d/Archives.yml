@@ -1,0 +1,24 @@
+Name:     'Archives'
+Priority: 160
+Class:    'large,data,annex'
+
+Stores:
+  hermes:
+    Annex:
+      Path: /Volumes/My Book/Archives
+  
+  clone:
+    Annex:
+      Path: /Volumes/Macintosh HD 1/Users/johnw/Archives/
+  
+  titan:
+    Annex:
+      Path: /tank/Archives/
+
+Options:
+  Rsync:
+    Filters:
+      - '- /Games'
+      - '- /Games/'
+      - '- /Systems'
+      - '- /Systems/'

@@ -1,0 +1,28 @@
+Name:     'LibraryParts'
+Priority: 31
+Class:    'system,sync'
+
+Stores:
+  hermes:
+    Path: /Library
+  
+  clone:
+    Rsync:
+      Path: /Volumes/Macintosh HD 1/Library
+  
+Options:
+  Rsync:
+    Filters:
+      - '+ /Python/'
+      - '+ /Ruby/'
+      - '+ /Perl/'
+      - '+ /Caches/'
+      - '+ /Caches/Homebrew/'
+      - '- /Caches/*'
+      - '- /Caches/*/'
+      - '- /Caches/.*'
+      - '- /Caches/.*/'
+      - '- /*'
+      - '- /*/'
+      - '- /.*'
+      - '- /.*/'
