@@ -473,59 +473,92 @@ syncStores bnd ((^? zfsScheme) -> Just z1) ((^? zfsScheme) -> Just z2) =
     syncZfsSchemes bnd z1 z2
 syncStores bnd s1 s2 = syncUsingRsync bnd s1 s2
 
+checkDirectory :: Binding -> FilePath -> Bool -> App Bool
+checkDirectory _ path False  = test_d path
+checkDirectory (isLocal -> True) path True = test_d path
+checkDirectory bnd path True = do
+    execute (env bnd) "test" ["-d", toTextIgnore path]
+    (== 0) <$> lastExitCode
+
+getStorePath :: Binding -> Store -> Bool -> Maybe FilePath
+getStorePath bnd s wantTarget
+    =   (s^?rsyncScheme.rsyncPath)
+    <|> (s^?zfsScheme.zfsPath)
+    <|> (s^?annexScheme.annexPath)
+    <|> errorL ("Could not find path for "
+                <> ((if wantTarget
+                     then bnd^.target
+                     else bnd^.source)^.hostName)
+                <> "/" <> (bnd^.fileset.fsName))
+
 syncAnnexSchemes :: Binding -> Annex -> Annex -> App ()
 syncAnnexSchemes bnd a1 a2 = do
     opts <- ask
-    let runner1_ = execute_ $
-            (env bnd) { exeCwd = Just (a1^.annexPath)
-                      , exeRemote = Nothing
-                      }
-        runner2_ = execute_ $
-            (env bnd) { exeCwd = Just (a2^.annexPath)
-                      , exeFindCmd = isLocal bnd
-                      }
+    exists1 <- checkDirectory bnd (a1^.annexPath) False
+    exists2 <- checkDirectory bnd (a2^.annexPath) True
+    if exists1 && exists2
+        then do
+        let runner1_ = execute_ $
+                (env bnd) { exeCwd    = Just (a1^.annexPath)
+                          , exeRemote = Nothing
+                          }
+            runner2_ = execute_ $
+                (env bnd) { exeCwd     = Just (a2^.annexPath)
+                          , exeFindCmd = isLocal bnd
+                          }
 
-    -- Add, copy, and sync from the source.
-    runner1_ "git-annex" $ ["-q" | not (verbose opts)]
-        <> ["add", "-c", "alwayscommit=false", "."]
-    runner1_ "git-annex" $ ["-q" | not (verbose opts)]
-        <> [ "--auto"
-           | not (a2^.annexIsPrimary || copyAll opts) ]
-        <> [ "copy", "-c", "alwayscommit=false" ]
-        <> [ "--not", "--in", annexTarget ]
-        <> a1^.annexFlags
-        <> [ "--to", annexTarget ]
-    runner1_ "git-annex" $ ["-q" | not (verbose opts)] <> ["sync"]
+        -- Add, copy, and sync from the source.
+        runner1_ "git-annex" $ ["-q" | not (verbose opts)]
+            <> ["add", "-c", "alwayscommit=false", "."]
+        runner1_ "git-annex" $ ["-q" | not (verbose opts)]
+            <> [ "--auto"
+               | not (a2^.annexIsPrimary || copyAll opts) ]
+            <> [ "copy", "-c", "alwayscommit=false" ]
+            <> [ "--not", "--in", annexTarget ]
+            <> a1^.annexFlags
+            <> [ "--to", annexTarget ]
+        runner1_ "git-annex" $ ["-q" | not (verbose opts)] <> ["sync"]
 
-    -- Sync to the destination.
-    runner2_ "git-annex" $ ["-q" | not (verbose opts)] <> ["sync"]
+        -- Sync to the destination.
+        runner2_ "git-annex" $ ["-q" | not (verbose opts)] <> ["sync"]
 
-    liftIO $ log' $ format "{}: Git Annex synchronized"
-        [ bnd^.fileset.fsName ]
+        liftIO $ log' $ format "{}: Git Annex synchronized"
+            [ bnd^.fileset.fsName ]
+
+        else liftIO $ warn $ "Remote directory missing: "
+                 <> toTextIgnore (a2^.annexPath)
   where
     annexTarget = a2^.annexName.non (bnd^.target.hostName)
 
 syncZfsSchemes :: Binding -> Zfs -> Zfs -> App ()
 syncZfsSchemes bnd z1 z2 = do
-    rev1 <- determineLastRev (env bnd) { exeRemote = Nothing } z1
-    rev2 <- determineLastRev (env bnd) z2
-    opts <- ask
-    let p = z1^.zfsPoolPath
-        r = toTextIgnore (z2^.zfsPoolPath)
-        msendArgs = case (rev1, rev2) of
-            (Just thisRev, Just thatRev) ->
-                if thisRev > thatRev
-                then Just $ sendTwoRevs opts p thatRev thisRev
-                else Nothing
-            (Just thisRev, Nothing) ->
-                Just $ sendRev opts p thisRev
-            (Nothing, _) ->
-                Just $ send (toTextIgnore p)
-        env'' = defaultExeEnv { exeMode = Sudo }
+    exists1 <- checkDirectory bnd (z1^.zfsPath) False
+    exists2 <- checkDirectory bnd (z2^.zfsPath) True
+    if exists1 && exists2
+        then do
+        rev1 <- determineLastRev (env bnd) { exeRemote = Nothing } z1
+        rev2 <- determineLastRev (env bnd) z2
+        opts <- ask
+        let p = z1^.zfsPoolPath
+            r = toTextIgnore (z2^.zfsPoolPath)
+            msendArgs = case (rev1, rev2) of
+                (Just thisRev, Just thatRev) ->
+                    if thisRev > thatRev
+                    then Just $ sendTwoRevs opts p thatRev thisRev
+                    else Nothing
+                (Just thisRev, Nothing) ->
+                    Just $ sendRev opts p thisRev
+                (Nothing, _) ->
+                    Just $ send (toTextIgnore p)
+            env'' = defaultExeEnv { exeMode = Sudo }
 
-    case msendArgs of
-        Nothing      -> liftIO $ warn "Remote has newer snapshot revision"
-        Just (c, xs) -> execute_ env'' c $ xs <> ["|", "zfs", "recv", "-F", r]
+        case msendArgs of
+            Nothing      -> liftIO $ warn "Remote has newer snapshot revision"
+            Just (c, xs) ->
+                execute_ env'' c $ xs <> ["|", "zfs", "recv", "-F", r]
+
+        else liftIO $ warn $ "Remote directory missing: "
+                 <> toTextIgnore (z2^.zfsPath)
   where
     send pool = ("zfs", ["send", pool])
 
@@ -555,15 +588,21 @@ determineLastRev env' zfs = do
         <$> execute env' "ls" ["-1", p]
 
 syncUsingRsync :: Binding -> Store -> Store -> App ()
-syncUsingRsync bnd s1 s2 =
-    rsync
-        (bnd^.fileset)
-        (fromMaybe (defaultRsync l) (s1^?rsyncScheme))
-        l
-        (fromMaybe (defaultRsync r) (s2^?rsyncScheme))
-        (case h of
-              Nothing   -> toTextIgnore r
-              Just targ -> format "{}:{}" [targ, escape (toTextIgnore r)])
+syncUsingRsync bnd s1 s2 = do
+    exists1 <- checkDirectory bnd l False
+    exists2 <- checkDirectory bnd r True
+    if exists1 && exists2
+        then
+        rsync
+            (bnd^.fileset)
+            (fromMaybe (defaultRsync l) (s1^?rsyncScheme))
+            l
+            (fromMaybe (defaultRsync r) (s2^?rsyncScheme))
+            (case h of
+                  Nothing   -> toTextIgnore r
+                  Just targ -> format "{}:{}" [targ, escape (toTextIgnore r)])
+
+        else liftIO $ warn $ "Remote directory missing: " <> toTextIgnore r
   where
     h = case targetHost bnd of
         Nothing -> Nothing
@@ -571,19 +610,8 @@ syncUsingRsync bnd s1 s2 =
             | Just (Just n) <- s2^?rsyncScheme.rsyncName -> Just n
             | otherwise -> Just (targ^.hostName)
 
-    Just (asDirectory -> l)
-        =   (s1^?rsyncScheme.rsyncPath)
-        <|> (s1^?zfsScheme.zfsPath)
-        <|> (s1^?annexScheme.annexPath)
-        <|> errorL ("Could not find path for "
-                    <> (bnd^.source.hostName) <> "/" <> (bnd^.fileset.fsName))
-
-    Just (asDirectory -> r)
-        =   (s2^?rsyncScheme.rsyncPath)
-        <|> (s2^?zfsScheme.zfsPath)
-        <|> (s2^?annexScheme.annexPath)
-        <|> errorL ("Could not find path for "
-                    <> (bnd^.target.hostName) <> "/" <> (bnd^.fileset.fsName))
+    Just (asDirectory -> l) = getStorePath bnd s1 False
+    Just (asDirectory -> r) = getStorePath bnd s2 True
 
 rsync :: Fileset -> Rsync -> FilePath -> Rsync -> Text -> App ()
 rsync fs srcRsync src destRsync dest = do
