@@ -476,9 +476,9 @@ syncStores bnd s1 s2 = syncUsingRsync bnd s1 s2
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
 checkDirectory _ path False  = test_d path
 checkDirectory (isLocal -> True) path True = test_d path
-checkDirectory bnd path True = do
-    execute (env bnd) "test" ["-d", toTextIgnore path]
-    (== 0) <$> lastExitCode
+checkDirectory bnd path True = return True -- do
+    -- execute (env bnd) "test" ["-d", toTextIgnore path]
+    -- (== 0) <$> lastExitCode
 
 getStorePath :: Binding -> Store -> Bool -> Maybe FilePath
 getStorePath bnd s wantTarget
