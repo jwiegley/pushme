@@ -6,6 +6,9 @@ Stores:
   hermes:
     Path: /Users/johnw/Pictures
   
+  vulcan:
+    Path: /Users/johnw/Pictures
+  
   vault:
     Path: /Volumes/Vault/Pictures
   

@@ -6,6 +6,9 @@ Stores:
   hermes:
     Path: /Users/johnw/Messages
   
+  vulcan:
+    Path: /Users/johnw/Messages
+  
   vault:
     Path: /Volumes/Vault/Messages
   

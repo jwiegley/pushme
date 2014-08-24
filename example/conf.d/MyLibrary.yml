@@ -8,6 +8,11 @@ Stores:
       Path: /Users/johnw/Library
       ReportMissing: true
   
+  vulcan:
+    Rsync:
+      Path: /Users/johnw/Library
+      ReportMissing: true
+  
   vault:
     Path: /Volumes/Vault/MyLibrary
   
@@ -132,6 +137,7 @@ Options:
       - '+ /Speech/'
       - '+ /Spelling/'
       - '+ /Spotlight/'
+      - '+ /StickiesDatabase'
       - '- /SyncedPreferences/'
       - '+ /TexPackages/'
       - '+ /Thunderbird/'

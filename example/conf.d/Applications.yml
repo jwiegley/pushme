@@ -6,6 +6,9 @@ Stores:
   hermes:
     Path: /Applications
   
+  vulcan:
+    Path: /Applications
+  
   clone:
     Rsync:
       Path: /Volumes/Macintosh HD 1/Applications

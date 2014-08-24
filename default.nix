@@ -25,7 +25,7 @@
 cabal.mkDerivation (self: {
   pname = "pushme";
   version = "2.0.0";
-  src = ./.;
+  src = builtins.filterSource (path: type: type != "unknown") ./.;
   isLibrary = false;
   isExecutable = true;
   buildDepends = [

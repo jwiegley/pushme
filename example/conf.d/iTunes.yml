@@ -4,7 +4,7 @@ Class:    'large,data,annex'
 
 Stores:
   hermes:
-    Path: /Volumes/My Book/iTunes
+    Path: /Volumes/My Passport/iTunes
   
   titan:
     Rsync:

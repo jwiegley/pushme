@@ -6,6 +6,9 @@ Stores:
   hermes:
     Path: /Users/johnw/Contracts
   
+  vulcan:
+    Path: /Users/johnw/Contracts
+  
   vault:
     Path: /Volumes/Vault/Contracts
   

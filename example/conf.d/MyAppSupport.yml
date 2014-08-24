@@ -8,6 +8,11 @@ Stores:
       Path: /Users/johnw/Library/Application Support
       ReportMissing: true
   
+  vulcan:
+    Rsync:
+      Path: /Users/johnw/Library/Application Support
+      ReportMissing: true
+  
   vault:
     Path: /Volumes/Vault/MyAppSupport
   
@@ -68,6 +73,7 @@ Options:
       - '+ /Dropzone/'
       - '+ /DxO Optics Pro/'
       - '+ /EasyFind/'
+      - '+ /Espresso/'
       - '+ /ExpanDrive/'
       - '+ /Expression Media/'
       - '+ /Exult/'

@@ -6,6 +6,9 @@ Stores:
   hermes:
     Path: /Library
   
+  vulcan:
+    Path: /Library
+  
   titan:
     Rsync:
       Path: /tank/Backups/System/Library

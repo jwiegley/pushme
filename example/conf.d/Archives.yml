@@ -7,10 +7,6 @@ Stores:
     Annex:
       Path: /Volumes/My Book/Archives
   
-  clone:
-    Annex:
-      Path: /Volumes/Macintosh HD 1/Users/johnw/Archives/
-  
   titan:
     Annex:
       Path: /tank/Archives/

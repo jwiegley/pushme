@@ -6,6 +6,9 @@ Stores:
   hermes:
     Path: /Users/johnw/Databases
   
+  vulcan:
+    Path: /Users/johnw/Databases
+  
   vault:
     Path: /Volumes/Vault/Databases
   

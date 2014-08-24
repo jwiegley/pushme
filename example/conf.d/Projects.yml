@@ -6,6 +6,9 @@ Stores:
   hermes:
     Path: /Users/johnw/Projects
   
+  vulcan:
+    Path: /Users/johnw/Projects
+  
   vault:
     Path: /Volumes/Vault/Projects
   
