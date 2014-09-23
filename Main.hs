@@ -50,7 +50,7 @@ import           Text.Regex.Posix ((=~))
 --import Debug.Trace
 
 version :: String
-version = "2.0.0"
+version = "2.0.0.1"
 
 copyright :: String
 copyright = "2013-4"
@@ -78,7 +78,7 @@ data Options = Options
 
 pushmeOpts :: Parser Options
 pushmeOpts = Options
-    <$> option
+    <$> option auto
         (   short 'j'
          <> long "jobs"
          <> value 1
