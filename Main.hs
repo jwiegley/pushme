@@ -126,7 +126,8 @@ pushmeOpts = Options
         (   short 'q'
          <> long "quiet"
          <> help "Be a little quieter")
-    <*> many (argument Just (metavar "ARGS"))
+   <*> many (argument (eitherReader Right) (metavar "ARGS"))
+    -- <*> many (argument Just (metavar "ARGS"))
 
 data Rsync = Rsync
     { _rsyncPath          :: FilePath

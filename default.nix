@@ -51,6 +51,7 @@ cabal.mkDerivation (self: {
     unorderedContainers
     yaml
   ];
+  jailbreak = true;
   meta = {
     homepage = "https://github.com/jwiegley/pushme";
     description = "Tool to synchronize multiple directories with rsync, zfs or git-annex";
