@@ -1,61 +1,24 @@
-{ cabal
-, aeson
-, conduit
-, conduitCombinators
-, conduitExtra
-, logging
-, monadLogger
-, ioStorage
-, lens
-, optparseApplicative
-, parallelIo
-, regexPosix
-, safe
-, shelly
-, systemFileio
-, systemFilepath
-, temporary
-, text
-, textFormat
-, time
-, unorderedContainers
-, yaml
+{ mkDerivation, aeson, base, bytestring, conduit
+, conduit-combinators, conduit-extra, containers, io-storage, lens
+, logging, monad-logger, old-locale, optparse-applicative
+, parallel-io, regex-posix, safe, shelly, stdenv, system-fileio
+, system-filepath, temporary, text, text-format, time, transformers
+, unix, unordered-containers, yaml
 }:
-
-cabal.mkDerivation (self: {
+mkDerivation {
   pname = "pushme";
-  version = "2.0.0";
-  src = builtins.filterSource (path: type: type != "unknown") ./.;
+  version = "2.0.0.2";
+  src = ./.;
   isLibrary = false;
   isExecutable = true;
   buildDepends = [
-    aeson
-    conduit
-    conduitCombinators
-    conduitExtra
-    logging
-    monadLogger
-    ioStorage
-    lens
-    optparseApplicative
-    parallelIo
-    regexPosix
-    safe
-    shelly
-    systemFileio
-    systemFilepath
-    temporary
-    text
-    textFormat
-    time
-    unorderedContainers
-    yaml
+    aeson base bytestring conduit conduit-combinators conduit-extra
+    containers io-storage lens logging monad-logger old-locale
+    optparse-applicative parallel-io regex-posix safe shelly
+    system-fileio system-filepath temporary text text-format time
+    transformers unix unordered-containers yaml
   ];
-  jailbreak = true;
-  meta = {
-    homepage = "https://github.com/jwiegley/pushme";
-    description = "Tool to synchronize multiple directories with rsync, zfs or git-annex";
-    license = self.stdenv.lib.licenses.bsd3;
-    platforms = self.ghc.meta.platforms;
-  };
-})
+  homepage = "https://github.com/jwiegley/pushme";
+  description = "Tool to synchronize directories with rsync, zfs or git-annex";
+  license = stdenv.lib.licenses.bsd3;
+}
