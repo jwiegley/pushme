@@ -11,10 +11,10 @@
 
 module Main where
 
-import           Conduit
 import           Control.Arrow
 import           Control.Concurrent.ParallelIO (stopGlobalPool, parallel_)
 import           Control.Exception
+import qualified Control.Foldl as L
 import           Control.Lens hiding (argument)
 import           Control.Logging
 import           Control.Monad
@@ -41,6 +41,13 @@ import           Filesystem
 import           Filesystem.Path.CurrentOS hiding (null, concat)
 import           GHC.Conc (setNumCapabilities)
 import           Options.Applicative hiding (Success, (&))
+import           Pipes as P
+import qualified Pipes.Group as P
+import qualified Pipes.Prelude as P
+import           Pipes.Safe as P hiding (try, finally)
+import qualified Pipes.Text as Text
+import qualified Pipes.Text.Encoding as Text
+import qualified Pipes.Text.IO as Text
 import           Prelude hiding (FilePath)
 import           Safe hiding (at)
 import           Shelly.Lifted hiding ((</>), find, trace)
@@ -346,16 +353,22 @@ readHostsFile = do
     exists <- isFile hostsFile
     if exists
         then do
-            hosts <- runResourceT $ sourceFile hostsFile
-                =$ linesUnboundedC
-                =$ mapC (\l ->
-                          let (x:xs) = map pack (words l)
-                              h = Host x xs
-                          in (x,h) : map (,h) xs)
-                $$ sinkList
+            hosts <- runSafeT $ P.toListM $
+                L.purely P.folds L.mconcat
+                    (Text.readFile (encodeString hostsFile) ^. Text.lines)
+                >-> P.map (\l -> let (x:xs) = T.words l
+                                     h = Host x xs
+                                 in (x,h) : map (,h) xs)
             return $ M.fromList (concat hosts)
         else
             return mempty
+
+directoryContents :: FilePath -> Producer FilePath IO ()
+directoryContents topPath = do
+    names <- lift $ listDirectory topPath
+    let properNames =
+            filter (`notElem` [".", "..", ".DS_Store", ".localized"]) names
+    forM_ properNames $ \name -> yield (topPath </> name)
 
 readFilesets :: IO (Map Text Fileset)
 readFilesets = do
@@ -366,11 +379,10 @@ readFilesets = do
             <> "using files named ~/.pushme/conf.d/<name>.yml"
 
     fmap (M.fromList . map ((^.fsName) &&& id))
-        $ runResourceT
-        $ sourceDirectory confD
-            $= filterC (\n -> extension n == Just "yml")
-            $= mapMC (liftIO . readDataFile)
-            $$ sinkList
+        $ P.toListM
+        $ directoryContents confD
+            >-> P.filter (\n -> extension n == Just "yml")
+            >-> P.mapM (liftIO . readDataFile)
 
 readDataFile :: FromJSON a => FilePath -> IO a
 readDataFile p = do
@@ -632,12 +644,12 @@ rsync fs srcRsync src destRsync dest = do
 
 reportMissingFiles :: Fileset -> Rsync -> IO ()
 reportMissingFiles fs r =
-    runResourceT $ sourceDirectory rpath
-        =$ mapC (T.drop len . toTextIgnore)
-        =$ catchC (filterC (\x -> not (any (matchText x) patterns)))
-            (\(_ :: SomeException) -> mapC id)
-        =$ filterC (`notElem` [ ".DS_Store", ".localized" ])
-        $$ mapM_C (\f -> warn' $ format "{}: unknown: \"{}\"" [label, f])
+    runEffect
+        $ for (directoryContents rpath
+               >-> P.map (T.drop len . toTextIgnore)
+               >-> P.catch (P.filter (\x -> not (any (matchText x) patterns)))
+                           (\(_ :: SomeException) -> P.cat))
+        $ \f -> liftIO $ warn' $ format "{}: unknown: \"{}\"" [label, f]
   where
     label   = fs^.fsName
     rpath   = asDirectory (r^.rsyncPath)
