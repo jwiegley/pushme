@@ -18,7 +18,6 @@ import qualified Control.Foldl as L
 import           Control.Lens hiding (argument)
 import           Control.Logging
 import           Control.Monad
-import           Control.Monad.Logger (LogLevel(..))
 import           Control.Monad.Trans.Reader
 import           Data.Aeson
 import qualified Data.ByteString as B (readFile)
