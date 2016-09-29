@@ -2,93 +2,71 @@ This is the script I use for synchronizing data between my machines (and also
 to directories on the same machine, externally connected drives, and to and
 between ZFS filesystems).
 
-Here is an example set of files for synchronizing my home directory and
-`/usr/local` via rsync between two machines: `foo` and `bar`.  First,
-`~/.pushme/stores.yml`:
+Each "fileset" you wish to synchronize is defined in a YAML file within
+`~/.pushme/conf.d`, for example this recipe I use for synchronizing my
 
-    - Targets:
-      - - bar
-        - - home
-          - local
-      HostRe: [Ff]oo
-      Name: Foo
-      UserName: johnw
-      SelfRe: [Ff]oo
-      ZfsPool: null
-      ZfsPath: null
-      IsPrimary: true
-      AnnexName: foo
-      AnnexFlags: []
-    - Targets:
-      - - foo
-        - - home
-          - local
-      HostRe: [Bb]ar
-      Name: Bar
-      UserName: johnw
-      SelfRe: [Bb]ar
-      ZfsPool: null
-      ZfsPath: null
-      IsPrimary: false
-      AnnexName: bar
-      AnnexFlags:
-      - - 'foo'
-        - - - 'home'
-            - - '-\('
-              - '--not'
-              - '--in'
-              - 'foo'
-              - '--and'
-              - '--not'
-              - '--in'
-              - 'web'
-              - '-\)'
+    Name:     'Desktop'
+    Priority: 12
+    Class:    'quick,main,sync'
+    
+    Stores:
+      hermes:
+        Path: /Users/johnw/Desktop
+      
+      maia:
+        Path: /Users/johnw/Desktop
+      
+      vulcan:
+        Path: /Users/johnw/Desktop
+      
+    Options:
+      Rsync:
+        Filters:
+          - '- /annex/'
 
-Then, `~/.pushme/filesets.yml`:
+Filters may also be specified for a specific computer only:
 
-    - Priority: 60
-      Name: home
-      Class: quick,main
-      ReportMissing: true
-    - Priority: 80
-      Name: local
-      Class: system,main
-      ReportMissing: false
+    Name:     'Desktop'
+    Priority: 12
+    Class:    'quick,main,sync'
+    
+    Stores:
+      hermes:
+        Rsync:
+          Path: /tank/Archives
+          Filters:
+            - '- /annex/'
+      
+      maia:
+        Path: /Users/johnw/Desktop
+      
+      vulcan:
+        Path: /Users/johnw/Desktop
 
-And finally, `~/.pushme/containers.yml`:
+There are three backends supported for file transfer `Rsync` (the default, if
+none is specified), `Zfs`, and `Annex`.  When two backends mismatch for a
+given machine, `Rsync` is used, otherwise the most optimal method for
+synchronizing that particular fileset type is attempted.
 
-    - Store: foo,bar
-      Recurse: false
-      Fileset: home
-      PoolPath: null
-      IsAnnex: false
-      LastRev: null
-      LastSync: null
-      Path: ~/
-    - Store: foo,bar
-      Recurse: false
-      Fileset: local
-      PoolPath: null
-      IsAnnex: false
-      LastRev: null
-      LastSync: null
-      Path: /usr/local/
+Note that recently I have only been using the `Rsync` method, so the other
+backends are not well tested, and should not be used except on trial data at
+this time. If you wish to help support them, I am available for assistance.
 
-Now I can run the following command:
+Pushme is invoked as follows (`--from` can be omitted, if `hostname` returns
+the same string):
 
-    foo $ pushme bar
-    15:18:44 - [NOTICE] Synchronizing Foo -> Bar
-    15:18:44 - [NOTICE] Sending Foo/home → Bar
+    pushme --from thisMachine thatMachine
+
+This command will synchronize every fileset that contains a backend definition
+for both `thisMachine` and `thatMachine`. Here is example output from such a
+command, assuming two filesets `home` and `local`:
+
+    foo $ pushme thatMachine
+    15:18:44 - [NOTICE] Synchronizing ThisMachine -> ThatMachine
+    15:18:44 - [NOTICE] Sending ThisMachine/home → ThatMachine
     15:18:52 - [NOTICE] Sent 151.0M in 131 files (out of 1.37G in 12,418)
-    15:20:26 - [NOTICE] Sending Foo/local → Bar
+    15:20:26 - [NOTICE] Sending ThisMachine/local → ThatMachine
     15:21:02 - [NOTICE] Sent 0b in 0 files (out of 6.45G in 207,453)
-
-If you are wondering about the complexity of keeping filesets separate from
-containers, it's because I use pushme for several different scenarios:
-rsync'ing between machines, rsync'ing into ZFS filesystems, and sending ZFS
-filesystems as snapshot stream between servers.  Pushme is able to handle all
-of these scenarios, but doing so required a bit more abstraction than a simple
-rsync-only tool would have needed.
 
 Some common options include:
 
