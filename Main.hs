@@ -72,6 +72,8 @@ data Options = Options
     , copyAll  :: Bool
     , dump     :: Bool
     , ssh      :: String
+    , rsyncOpt :: String
+    , checksum :: Bool
     , fromName :: String
     , filesets :: String
     , classes  :: String
@@ -107,6 +109,13 @@ pushmeOpts = Options
         (   long "ssh"
          <> value ""
          <> help "Use a specific ssh command")
+    <*> strOption
+        (   long "rsync"
+         <> value ""
+         <> help "Use a specific rsync command")
+    <*> switch
+        (   long "checksum"
+         <> help "Pass --checksum flag to rsync")
     <*> strOption
         (   long "from"
          <> value ""
@@ -675,10 +684,9 @@ reportMissingFiles fs r =
 doRsync :: Text -> [Text] -> Text -> Text -> App ()
 doRsync label options src dest = do
     opts <- ask
-    let dry      = dryRun opts
-        noSy     = noSync opts
-        den      = (\x -> if x then 1000 else 1024) $ siUnits opts
+    let den      = (\x -> if x then 1000 else 1024) $ siUnits opts
         sshCmd   = ssh opts
+        rsyncCmd = rsyncOpt opts
         toRemote = ":" `T.isInfixOf` dest
         args     =
             [ "-aHEy"               -- jww (2012-09-23): maybe -A too?
@@ -707,12 +715,15 @@ doRsync label options src dest = do
             <> (if not (null sshCmd)
                 then ["--rsh", pack sshCmd]
                 else [])
-            <> ["-n" | dry]
+            <> ["-n" | dryRun opts]
+            <> ["--checksum" | checksum opts]
             <> (if verbose opts then ["-P"] else ["--stats"])
-            <> ["--rsync-path=sudo rsync" | toRemote]
+            <> [pack ("--rsync-path=sudo " ++ if not (null rsyncCmd)
+                                              then rsyncCmd
+                                              else "rsync") | toRemote]
             <> options
             <> [src, dest]
-        analyze = not (verbose opts) && not noSy
+        analyze = not (verbose opts) && not (noSync opts)
         env' =  defaultExeEnv
             { exeMode    = if toRemote then SudoAsRoot else Sudo
             , exeDiscard = not analyze
