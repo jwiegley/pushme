@@ -15,11 +15,11 @@ import           Control.Arrow
 import           Control.Concurrent.ParallelIO (stopGlobalPool, parallel_)
 import           Control.Exception
 import qualified Control.Foldl as L
-import           Control.Lens hiding (argument)
+import           Control.Lens
 import           Control.Logging
 import           Control.Monad
 import           Control.Monad.Trans.Reader
-import           Data.Aeson
+import           Data.Aeson hiding (Options)
 import qualified Data.ByteString as B (readFile)
 import           Data.Char (isDigit)
 import           Data.List
@@ -40,14 +40,13 @@ import           GHC.Conc (setNumCapabilities)
 import           Pipes as P
 import qualified Pipes.Group as P
 import qualified Pipes.Prelude as P
-import           Pipes.Safe as P hiding (try, finally)
+import           Pipes.Safe as P hiding (finally)
 import qualified Pipes.Text as Text
-import qualified Pipes.Text.Encoding as Text
 import qualified Pipes.Text.IO as Text
 import           Prelude hiding (FilePath)
 import           Pushme.Options (Options(..), getOptions)
 import           Safe hiding (at)
-import           Shelly.Lifted hiding ((</>), find, trace)
+import           Shelly.Lifted hiding ((</>))
 import           Text.Printf (printf)
 import           Text.Regex.Posix ((=~))
 
@@ -58,11 +57,14 @@ data Rsync = Rsync
     , _rsyncName          :: Maybe Text
     , _rsyncFilters       :: [Text]
     , _rsyncReportMissing :: Bool
+    , _rsyncSendOnly      :: Bool
+    , _rsyncReceiveOnly   :: Bool
+    , _rsyncReceiveFrom   :: Maybe [Text]
     }
     deriving (Show, Eq)
 
 defaultRsync :: FilePath -> Rsync
-defaultRsync p = Rsync p Nothing [] False
+defaultRsync p = Rsync p Nothing [] False False False Nothing
 
 instance FromJSON FilePath where
     parseJSON = fmap fromText . parseJSON
@@ -73,6 +75,9 @@ instance FromJSON Rsync where
         <*> v .:? "Host"
         <*> v .:? "Filters"       .!= []
         <*> v .:? "ReportMissing" .!= False
+        <*> v .:? "SendOnly"      .!= False
+        <*> v .:? "ReceiveOnly"   .!= False
+        <*> v .:? "ReceiveFrom"   .!= Nothing
     parseJSON _ = errorL "Error parsing Rsync"
 
 makeLenses ''Rsync
@@ -118,7 +123,7 @@ data StorageScheme
 
 makePrisms ''StorageScheme
 
-data Store = Store
+newtype Store = Store
     { _schemes :: Map Text StorageScheme
     } deriving (Show, Eq)
 
@@ -174,6 +179,10 @@ instance FromJSON Fileset where
           where
             k fs' "Filters" xs =
                 fs' & stores.traverse.rsyncScheme.rsyncFilters <>~ fromJSON' xs
+            k fs' "ReportMissing" xs =
+                fs' & stores.traverse.rsyncScheme.rsyncReportMissing &&~ fromJSON' xs
+            k fs' "ReceiveFrom" xs =
+                fs' & stores.traverse.rsyncScheme.rsyncReceiveFrom <>~ fromJSON' xs
             k fs' _ _ = fs'
 
         f fs "Zfs"   = const fs
@@ -309,7 +318,9 @@ processBindings opts hosts = do
     fsets    <- readFilesets
     thisHost <- T.init <$> shelly (silently $ cmd "hostname")
     let dflt = defaultHost (pack (fromName opts))
-        here = hosts^.at thisHost.non dflt.hostName
+        here = case dflt of
+            Host "" _ -> hosts^.at thisHost.non dflt.hostName
+            _ -> dflt^.hostName
     when (T.null here) $
         errorL "Please identify the current host using --from"
     parallel_
@@ -320,14 +331,14 @@ relevantBindings :: Options -> Text -> Map Text Host -> Map Text Fileset
                  -> [Binding]
 relevantBindings opts thisHost hosts fsets
     = sortBy (comparing (^.fileset.fsPriority))
-    $ filter matching
-    $ catMaybes
+    . filter matching'
+    . catMaybes
     $ createBinding
         <$> M.elems fsets
         <*> pure thisHost
         <*> map pack (cliArgs opts)
   where
-    matching bnd =
+    matching' bnd =
            (T.null fss || matchText fss (fs^.fsName))
          && (T.null cls || matchText cls (fs^.fsClass))
       where
@@ -402,7 +413,7 @@ syncStores bnd s1 s2 = syncUsingRsync bnd s1 s2
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
 checkDirectory _ path False  = test_d path
 checkDirectory (isLocal -> True) path True = test_d path
-checkDirectory bnd path True = return True -- do
+checkDirectory _bnd _path True = return True -- do
     -- execute (env bnd) "test" ["-d", toTextIgnore path]
     -- (== 0) <$> lastExitCode
 
@@ -508,9 +519,9 @@ determineLastRev env' zfs = do
     let p = toTextIgnore $ (zfs^.zfsPath) </> ".zfs" </> "snapshot"
     fmap lastMay
           $ sort
-        <$> map (read . unpack)
-        <$> filter (T.all isDigit)
-        <$> T.lines
+          . map (read . unpack)
+          . filter (T.all isDigit)
+          . T.lines
         <$> execute env' "ls" ["-1", p]
 
 syncUsingRsync :: Binding -> Store -> Store -> App ()
@@ -520,15 +531,17 @@ syncUsingRsync bnd s1 s2 = do
     if exists1 && exists2
         then
         rsync
-            (bnd^.fileset)
+            bnd
             (fromMaybe (defaultRsync l) (s1^?rsyncScheme))
             l
             (fromMaybe (defaultRsync r) (s2^?rsyncScheme))
             (case h of
                   Nothing   -> toTextIgnore r
-                  Just targ -> format "{}:{}" [targ, escape (toTextIgnore r)])
+                  Just targ -> format "{}:{}" [targ, toTextIgnore r])
 
-        else liftIO $ warn $ "Remote directory missing: " <> toTextIgnore r
+        else do
+            liftIO $ warn $ "Either local directory missing: " <> toTextIgnore l
+            liftIO $ warn $ "OR remote directory missing: " <> toTextIgnore r
   where
     h = case targetHost bnd of
         Nothing -> Nothing
@@ -539,21 +552,44 @@ syncUsingRsync bnd s1 s2 = do
     Just (asDirectory -> l) = getStorePath bnd s1 False
     Just (asDirectory -> r) = getStorePath bnd s2 True
 
-rsync :: Fileset -> Rsync -> FilePath -> Rsync -> Text -> App ()
-rsync fs srcRsync src destRsync dest = do
-    let rfs   = (srcRsync^.rsyncFilters) <> (destRsync^.rsyncFilters)
-        go xs = doRsync (fs^.fsName) xs (toTextIgnore src) dest
-    case rfs of
-        [] -> go []
+rsync :: Binding -> Rsync -> FilePath -> Rsync -> Text -> App ()
+rsync bnd srcRsync src destRsync dest =
+    if srcRsync^.rsyncReceiveOnly
+        || destRsync^.rsyncSendOnly
+        || maybe False (not . (bnd^.source.hostName `elem`))
+                       (destRsync^.rsyncReceiveFrom)
+    then do
+        opts <- ask
+        let analyze = not (verbose opts) && not (noSync opts)
+        when analyze $
+            liftIO $ log' $ format
+                "{}: \ESC[34mSkipped: {}\ESC[34m\ESC[0m"
+                [ fs^.fsName
+                , if srcRsync^.rsyncReceiveOnly
+                  then "<- ReceiveOnly"
+                  else if destRsync^.rsyncSendOnly
+                       then "-> SendOnly"
+                       else if maybe False (not . (bnd^.source.hostName `elem`))
+                                           (destRsync^.rsyncReceiveFrom)
+                            then "! ReceiveFrom"
+                            else "Unknown"
+                ]
+    else do
+        let rfs   = (srcRsync^.rsyncFilters) <> (destRsync^.rsyncFilters)
+            go xs = doRsync (fs^.fsName) xs (toTextIgnore src) dest
+        case rfs of
+            [] -> go []
 
-        filters -> do
-            when (srcRsync^.rsyncReportMissing) $
-                liftIO $ reportMissingFiles fs srcRsync
+            filters -> do
+                when (srcRsync^.rsyncReportMissing) $
+                    liftIO $ reportMissingFiles fs srcRsync
 
-            withTmpDir $ \p -> do
-                let fpath = p </> "filters"
-                writefile fpath (T.unlines filters)
-                go ["--include-from=" <> toTextIgnore fpath]
+                withTmpDir $ \p -> do
+                    let fpath = p </> "filters"
+                    writefile fpath (T.unlines filters)
+                    go ["--include-from=" <> toTextIgnore fpath]
+  where
+    fs = bnd^.fileset
 
 reportMissingFiles :: Fileset -> Rsync -> IO ()
 reportMissingFiles fs r =
@@ -627,7 +663,9 @@ doRsync label options src dest = do
                                               then rsyncCmd
                                               else "rsync") | toRemote]
             <> options
-            <> [src, dest]
+            <> [src, if toRemote
+                      then T.intercalate "\\ " (T.words dest)
+                      else dest]
         analyze = not (verbose opts) && not (noSync opts)
         env' =  defaultExeEnv
             { exeMode    = if toRemote then SudoAsRoot else Sudo
@@ -701,7 +739,8 @@ execute ExeEnv {..} name args = do
         then return ""
         else do
             n <- findCmd name''
-            liftIO $ debug' $ format "{} {}" [toTextIgnore n, tshow args'']
+            liftIO $ debug' $ format "{} {}"
+                [ toTextIgnore n, T.intercalate " " (map tshow args'') ]
             runner' n args''
   where
     findCmd n
