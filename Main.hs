@@ -413,9 +413,9 @@ syncStores bnd s1 s2 = syncUsingRsync bnd s1 s2
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
 checkDirectory _ path False  = test_d path
 checkDirectory (isLocal -> True) path True = test_d path
-checkDirectory _bnd _path True = return True -- do
-    -- execute (env bnd) "test" ["-d", toTextIgnore path]
-    -- (== 0) <$> lastExitCode
+checkDirectory bnd path True = do
+    execute_ (env bnd) "test" ["-d", escape (toTextIgnore path)]
+    (== 0) <$> lastExitCode
 
 getStorePath :: Binding -> Store -> Bool -> Maybe FilePath
 getStorePath bnd s wantTarget
@@ -713,21 +713,21 @@ execute ExeEnv {..} name args = do
             Normal     -> (cmdName, args)
             Sudo       -> ("sudo", toTextIgnore cmdName:args)
             SudoAsRoot -> sudoAsRoot cmdName args
-        (modifier, name'', args'')= case exeRemote of
+
+        (modifier, name'', args'') = case exeRemote of
             Nothing -> (id, name', args')
-            Just h  ->
-                remote opts h $ case exeCwd of
-                    Nothing  -> (id, name', args')
-                    Just cwd ->
-                        (escaping False, fromText $ T.concat $
-                             [ "\"cd "
-                             , escape (toTextIgnore cwd)
-                             , "; "
-                             , escape (toTextIgnore name')
-                             , " "
-                             ]
-                            <> intersperse " " (map escape args')
-                            <> ["\""], [])
+            Just h  -> remote opts h $ case exeCwd of
+                Nothing  -> (id, name', args')
+                Just cwd ->
+                    (escaping False, fromText $ T.concat $
+                         [ "\"cd "
+                         , escape (toTextIgnore cwd)
+                         , "; "
+                         , escape (toTextIgnore name')
+                         , " "
+                         ]
+                        <> intersperse " " (map escape args')
+                        <> ["\""], [])
         runner p xs
             | exeDiscard = run_ p xs >> return ""
             | otherwise  = run p xs
@@ -738,9 +738,13 @@ execute ExeEnv {..} name args = do
     if dryRun opts || noSync opts
         then return ""
         else do
-            n <- findCmd name''
+            let (sshCmd:sshArgs) = words (encodeString name'')
+            n <- findCmd (decodeString sshCmd)
             liftIO $ debug' $ format "{} {}"
-                [ toTextIgnore n, T.intercalate " " (map tshow args'') ]
+                [ toTextIgnore n
+                , T.intercalate " "
+                      (map tshow (map T.pack sshArgs ++ args''))
+                ]
             runner' n args''
   where
     findCmd n
