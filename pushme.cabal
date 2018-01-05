@@ -2,10 +2,10 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 4dd172a5ea6fa754c4e33bf4e491f4cb405e6b9770e2bc094176b875b320957d
+-- hash: d558e8523ac976947d8764b9f7483a8cd4851c81f7dd458bc4fe88f3b3ac7855
 
 name:           pushme
-version:        2.1.1
+version:        2.1.2
 synopsis:       Tool to synchronize directories with rsync, zfs or git-annex
 description:    Script I use for synchronizing data among machines.
 category:       System
