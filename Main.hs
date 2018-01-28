@@ -57,6 +57,7 @@ data Rsync = Rsync
     , _rsyncName          :: Maybe Text
     , _rsyncFilters       :: [Text]
     , _rsyncReportMissing :: Bool
+    , _rsyncNoLinks       :: Bool
     , _rsyncSendOnly      :: Bool
     , _rsyncReceiveOnly   :: Bool
     , _rsyncReceiveFrom   :: Maybe [Text]
@@ -64,7 +65,7 @@ data Rsync = Rsync
     deriving (Show, Eq)
 
 defaultRsync :: FilePath -> Rsync
-defaultRsync p = Rsync p Nothing [] False False False Nothing
+defaultRsync p = Rsync p Nothing [] False False False False Nothing
 
 instance FromJSON FilePath where
     parseJSON = fmap fromText . parseJSON
@@ -75,6 +76,7 @@ instance FromJSON Rsync where
         <*> v .:? "Host"
         <*> v .:? "Filters"       .!= []
         <*> v .:? "ReportMissing" .!= False
+        <*> v .:? "NoLinks"       .!= False
         <*> v .:? "SendOnly"      .!= False
         <*> v .:? "ReceiveOnly"   .!= False
         <*> v .:? "ReceiveFrom"   .!= Nothing
@@ -181,6 +183,12 @@ instance FromJSON Fileset where
                 fs' & stores.traverse.rsyncScheme.rsyncFilters <>~ fromJSON' xs
             k fs' "ReportMissing" xs =
                 fs' & stores.traverse.rsyncScheme.rsyncReportMissing &&~ fromJSON' xs
+            k fs' "NoLinks" xs =
+                fs' & stores.traverse.rsyncScheme.rsyncNoLinks &&~ fromJSON' xs
+            k fs' "SendOnly" xs =
+                fs' & stores.traverse.rsyncScheme.rsyncSendOnly &&~ fromJSON' xs
+            k fs' "ReceiveOnly" xs =
+                fs' & stores.traverse.rsyncScheme.rsyncReceiveOnly &&~ fromJSON' xs
             k fs' "ReceiveFrom" xs =
                 fs' & stores.traverse.rsyncScheme.rsyncReceiveFrom <>~ fromJSON' xs
             k fs' _ _ = fs'
@@ -266,12 +274,12 @@ main = withStdoutLogging $ do
     setLogLevel $ if verbose opts then LevelDebug else LevelInfo
     setLogTimeFormat "%H:%M:%S"
 
-    hosts <- readHostsFile
+    hosts <- readHostsFile opts
     processBindings opts hosts `finally` stopGlobalPool
 
-readHostsFile :: IO (Map Text Host)
-readHostsFile = do
-    hostsFile <- getHomePath (".pushme" </> "hosts")
+readHostsFile :: Options -> IO (Map Text Host)
+readHostsFile opts = do
+    hostsFile <- expandPath (decodeString (configDir opts) </> "hosts")
     exists <- isFile hostsFile
     if exists
         then do
@@ -292,13 +300,15 @@ directoryContents topPath = do
             filter (`notElem` [".", "..", ".DS_Store", ".localized"]) names
     forM_ properNames $ \name -> yield (topPath </> name)
 
-readFilesets :: IO (Map Text Fileset)
-readFilesets = do
-    confD <- getHomePath (".pushme" </> "conf.d")
+readFilesets :: Options -> IO (Map Text Fileset)
+readFilesets opts = do
+    confD <- expandPath (decodeString (configDir opts) </> "conf.d")
     exists <- isDirectory confD
     unless exists $
         errorL $ "Please define filesets, "
-            <> "using files named ~/.pushme/conf.d/<name>.yml"
+            <> "using files named "
+            <> T.pack (encodeString (decodeString (configDir opts)
+                                        </> "conf.d" </> "<name>.yml"))
 
     fmap (M.fromList . map ((^.fsName) &&& id))
         $ P.toListM
@@ -315,7 +325,7 @@ readDataFile p = do
 
 processBindings :: Options -> Map Text Host -> IO ()
 processBindings opts hosts = do
-    fsets    <- readFilesets
+    fsets    <- readFilesets opts
     thisHost <- T.init <$> shelly (silently $ cmd "hostname")
     let dflt = defaultHost (pack (fromName opts))
         here = case dflt of
@@ -576,7 +586,8 @@ rsync bnd srcRsync src destRsync dest =
                 ]
     else do
         let rfs   = (srcRsync^.rsyncFilters) <> (destRsync^.rsyncFilters)
-            go xs = doRsync (fs^.fsName) xs (toTextIgnore src) dest
+            nol   = (srcRsync^.rsyncNoLinks) || (destRsync^.rsyncNoLinks)
+            go xs = doRsync (fs^.fsName) xs (toTextIgnore src) dest nol
         case rfs of
             [] -> go []
 
@@ -622,8 +633,8 @@ reportMissingFiles fs r =
         . T.replace "?" "."
         . T.replace "." "\\."
 
-doRsync :: Text -> [Text] -> Text -> Text -> App ()
-doRsync label options src dest = do
+doRsync :: Text -> [Text] -> Text -> Text -> Bool -> App ()
+doRsync label options src dest noLinks = do
     opts <- ask
     let den      = (\x -> if x then 1000 else 1024) $ siUnits opts
         sshCmd   = ssh opts
@@ -657,6 +668,7 @@ doRsync label options src dest = do
                 then ["--rsh", pack sshCmd]
                 else [])
             <> ["-n" | dryRun opts]
+            <> ["--no-links" | noLinks]
             <> ["--checksum" | checksum opts]
             <> (if verbose opts then ["-P"] else ["--stats"])
             <> [pack ("--rsync-path=sudo " ++ if not (null rsyncCmd)
@@ -774,8 +786,9 @@ execute ExeEnv {..} name args = do
 execute_ :: ExeEnv -> FilePath -> [Text] -> App ()
 execute_ env' fp args = void $ execute env' { exeDiscard = True } fp args
 
-getHomePath :: FilePath -> IO FilePath
-getHomePath p = (</> p) <$> getHomeDirectory
+expandPath :: FilePath -> IO FilePath
+expandPath (encodeString -> '~':'/':p) = (</> decodeString p) <$> getHomeDirectory
+expandPath p = return p
 
 asDirectory :: FilePath -> FilePath
 asDirectory (toTextIgnore -> fp) =

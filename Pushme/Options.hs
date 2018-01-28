@@ -18,21 +18,22 @@ pushmeSummary =
     "pushme " ++ version ++ ", (C) " ++ copyright ++ " John Wiegley"
 
 data Options = Options
-    { jobs     :: Int
-    , dryRun   :: Bool
-    , noSync   :: Bool
-    , copyAll  :: Bool
-    , dump     :: Bool
-    , ssh      :: String
-    , rsyncOpt :: String
-    , checksum :: Bool
-    , fromName :: String
-    , filesets :: String
-    , classes  :: String
-    , siUnits  :: Bool
-    , verbose  :: Bool
-    , quiet    :: Bool
-    , cliArgs  :: [String]
+    { jobs      :: Int
+    , dryRun    :: Bool
+    , noSync    :: Bool
+    , copyAll   :: Bool
+    , dump      :: Bool
+    , ssh       :: String
+    , rsyncOpt  :: String
+    , checksum  :: Bool
+    , fromName  :: String
+    , configDir :: String
+    , filesets  :: String
+    , classes   :: String
+    , siUnits   :: Bool
+    , verbose   :: Bool
+    , quiet     :: Bool
+    , cliArgs   :: [String]
     }
     deriving (Data, Typeable, Show, Eq)
 
@@ -72,6 +73,10 @@ pushmeOpts = Options
         (   long "from"
          <> value ""
          <> help "Provide the name of the current host")
+    <*> strOption
+        (   long "config"
+         <> value "~/.pushme"
+         <> help "Directory containing configuration files (def: ~/.pushme)")
     <*> strOption
         (   short 'f'
          <> long "filesets"
