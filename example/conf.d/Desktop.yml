@@ -1,4 +1,4 @@
-Name:     'Documents'
+Name:     'Desktop'
 Priority: 12
 Class:    'quick,main,sync'
 
@@ -7,29 +7,29 @@ Stores:
     Rsync:
       ReceiveFrom:
         - hermes
-      Path: /Users/johnw/Documents
+      Path: /Users/johnw/Desktop
 
   mybook:
-    Path: /Volumes/mybook/Documents
+    Path: /Volumes/mybook/Desktop
   
   tank:
-    Path: /Volumes/tank/Documents
+    Path: /Volumes/tank/Desktop
   
   vault:
     Rsync:
       ReceiveFrom:
         - vulcan
         - hermes
-      Path: /Volumes/vault/Documents
+      Path: /Volumes/vault/Desktop
 
   hermes:
     Rsync:
       ReceiveFrom:
         - vulcan
-      Path: /Users/johnw/Documents
+      Path: /Users/johnw/Desktop
   
   titan:
     Rsync:
       ReceiveFrom:
         - tank
-      Path: /tank/Documents
+      Path: /tank/Desktop

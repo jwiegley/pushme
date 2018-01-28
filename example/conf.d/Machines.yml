@@ -3,16 +3,32 @@ Priority: 400
 Class:    'large,data'
 
 Stores:
-  hermes:
-    Path: /Users/johnw/Machines
-  
   vulcan:
-    Path: /Users/johnw/Machines
-  
-  clone:
     Rsync:
-      Path: /Volumes/Macintosh HD 1/Users/johnw/Machines
+      SendOnly: true
+      Path: /Users/johnw/Machines
+      Filters:
+        - '+ /Fiat.vmwarevm/'
+        - '+ /PetaLinux.vmwarevm/'
+        - '+ /Windows 7 Ultimate x64.vmwarevm'
+        - '- /*'
+        - '- /*/'
+        - '- /.*'
+        - '- /.*/'
+
+  mybook:
+    Path: /Volumes/mybook/Machines
+  
+  tank:
+    Path: /Volumes/tank/Machines
+  
+  hermes:
+    Rsync:
+      SendOnly: true
+      Path: /Users/johnw/Machines
   
   titan:
     Rsync:
-      Path: /tank/Data/Machines
+      ReceiveFrom:
+        - tank
+      Path: /tank/Machines

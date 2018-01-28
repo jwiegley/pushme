@@ -1,0 +1,20 @@
+Name:     'Media'
+Priority: 410
+Class:    'large,data'
+
+Stores:
+  mybook:
+    Rsync:
+      SendOnly: true
+      Path: /Volumes/mybook/Media
+  
+  tank:
+    Rsync:
+      SendOnly: true
+      Path: /Volumes/tank/Media
+  
+  titan:
+    Rsync:
+      ReceiveFrom:
+        - tank
+      Path: /tank/Media

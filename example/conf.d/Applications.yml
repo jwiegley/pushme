@@ -3,28 +3,26 @@ Priority: 95
 Class:    'system,main,sync'
 
 Stores:
-  hermes:
-    Path: /Applications
-  
   vulcan:
-    Path: /Applications
-  
-  clone:
     Rsync:
-      Path: /Volumes/Macintosh HD 1/Applications
+      ReceiveFrom:
+        - hermes
+      Path: /Applications/Misc
+  
+  mybook:
+    Path: /Volumes/mybook/Applications
+
+  tank:
+    Path: /Volumes/tank/Applications
+
+  hermes:
+    Rsync:
+      ReceiveFrom:
+        - vulcan
+      Path: /Applications/Misc
   
   titan:
     Rsync:
-      Path: /tank/Backups/System/Applications
-
-Options:
-  Rsync:
-    Filters:
-      - '+ /Games/'
-      - '+ /MacPorts/'
-      - '+ /Misc/'
-      - '+ /TeX/'
-      - '- /*'
-      - '- /*/'
-      - '- /.*'
-      - '- /.*/'
+      ReceiveFrom:
+        - tank
+      Path: /tank/Applications

@@ -3,9 +3,11 @@ Priority: 142
 Class:    'large,data,annex'
 
 Stores:
-  hermes:
-    Path: /Volumes/My Passport/iTunes
+  mybook:
+    Path: /Volumes/mybook/iTunes
+  
+  tank:
+    Path: /Volumes/tank/iTunes
   
   titan:
-    Rsync:
-      Path: /tank/Media/iTunes
+    Path: /tank/iTunes

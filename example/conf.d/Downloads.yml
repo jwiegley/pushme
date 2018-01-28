@@ -3,32 +3,48 @@ Priority: 100
 Class:    'large,data,sync'
 
 Stores:
-  hermes:
-    Path: /Users/johnw/Downloads
-  
   vulcan:
-    Path: /Users/johnw/Downloads
-  
-  clone:
     Rsync:
-      Path: /Volumes/Macintosh HD 1/Users/johnw/Downloads
+      ReceiveFrom:
+        - hermes
+      Path: /Users/johnw/Downloads
+  
+  mybook:
+    Path: /Volumes/mybook/Downloads
+
+  tank:
+    Path: /Volumes/tank/Downloads
+
+  vault:
+    Rsync:
+      ReceiveFrom:
+        - vulcan
+        - hermes
+      Path: /Volumes/vault/Downloads
+
+  hermes:
+    Rsync:
+      ReceiveFrom:
+        - vulcan
+      Path: /Users/johnw/Downloads
   
   titan:
     Rsync:
-      Path: /tank/Data/Downloads
+      ReceiveFrom:
+        - tank
+      Path: /tank/Downloads
 
 Options:
   Rsync:
     Filters:
+      - '- *.download'
+      - '- *.download/'
       - '- *.dvdmedia/'
       - '- *.part'
       - '- *.part/'
       - '- *.partial'
       - '- *.partial/'
-      - '- *.download'
-      - '- *.download/'
       - '- *.ripit/'
       - '- Hermes*.dmg'
-      - '- Vulcan*.dmg'
       - '- Nasim*.dmg'
-      - '- /ncatlab/'
+      - '- Vulcan*.dmg'

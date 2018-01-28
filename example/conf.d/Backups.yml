@@ -1,0 +1,21 @@
+Name:     'Backups'
+Priority: 200
+Class:    'large,data'
+
+Stores:
+  mybook:
+    Path: /Volumes/mybook/Backups
+  
+  tank:
+    Path: /Volumes/tank/Backups
+  
+  titan:
+    Rsync:
+      ReceiveFrom:
+        - tank
+      Path: /tank/Backups
+
+Options:
+  Rsync:
+    Filters:
+      - '- /Images/'

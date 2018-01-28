@@ -1,11 +1,18 @@
 Name:     'Photos'
 Priority: 130
-Class:    'large,data,annex'
+Class:    'large,data'
 
 Stores:
-  hermes:
-    Path: /Volumes/My Book/Photos
-  
+  mybook:
+    Path: /Volumes/mybook/Photos
+
+  tank:
+    Path: /Volumes/tank/Photos
+
   titan:
-    Rsync:
-      Path: /tank/Media/Photos
+    Path: /tank/Photos
+
+Options:
+  Rsync:
+    ReceiveFrom:
+      - tank

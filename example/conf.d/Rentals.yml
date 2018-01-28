@@ -1,0 +1,18 @@
+Name:     'Rentals'
+Priority: 142
+Class:    'large,data,annex'
+
+Stores:
+  mybook:
+    Path: /Volumes/mybook/Rentals
+  
+  tank:
+    Path: /Volumes/tank/Rentals
+  
+  titan:
+    Path: /tank/Rentals
+
+Options:
+  Rsync:
+    ReceiveFrom:
+      - tank

@@ -1,0 +1,20 @@
+Name:     'Games'
+Priority: 410
+Class:    'large,data'
+
+Stores:
+  mybook:
+    Rsync:
+      SendOnly: true
+      Path: /Volumes/mybook/Games
+  
+  tank:
+    Rsync:
+      SendOnly: true
+      Path: /Volumes/tank/Games
+  
+  titan:
+    Rsync:
+      ReceiveFrom:
+        - tank
+      Path: /tank/Games

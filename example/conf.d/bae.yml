@@ -1,0 +1,50 @@
+Name:     'bae'
+Priority: 9
+Class:    'data,sync'
+
+Stores:
+  vulcan:
+    Rsync:
+      ReceiveFrom:
+        - hermes
+      Path: /Users/johnw/bae
+  
+  mybook:
+    Path: /Volumes/mybook/bae
+
+  tank:
+    Path: /Volumes/tank/bae
+
+  vault:
+    Rsync:
+      ReceiveFrom:
+        - vulcan
+        - hermes
+      Path: /Volumes/vault/bae
+
+  hermes:
+    Rsync:
+      ReceiveFrom:
+        - vulcan
+      Path: /Users/johnw/bae
+  
+  titan:
+    Rsync:
+      ReceiveFrom:
+        - tank
+      Path: /tank/bae
+
+Options:
+  Rsync:
+    Filters:
+      - '- /BoostPro/'
+      - '- cabal-dev/'
+      - '- dist/'
+      - '- .hsenvs/'
+      - '- .git/annex/objects/'
+      - '- *-workdir/'
+      - '- git-repos/'
+      - '- *.db'
+      - '- *.hi'
+      - '- *.o'
+      - '- TAGS'

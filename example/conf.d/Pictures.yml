@@ -3,19 +3,26 @@ Priority: 130
 Class:    'large,data,annex'
 
 Stores:
-  hermes:
-    Path: /Users/johnw/Pictures
-  
   vulcan:
-    Path: /Users/johnw/Pictures
-  
-  vault:
-    Path: /Volumes/Vault/Pictures
-  
-  clone:
     Rsync:
-      Path: /Volumes/Macintosh HD 1/Users/johnw/Pictures
+      SendOnly: true
+      Path: /Users/johnw/Pictures
+      Filters:
+        - '+ /*.mpcatalog'
+        - '+ /*.photoslibrary/'
+        - '- /*'
+        - '- /*/'
+        - '- /.*'
+        - '- /.*/'
+
+  mybook:
+    Path: /Volumes/mybook/Pictures
+  
+  tank:
+    Path: /Volumes/tank/Pictures
   
   titan:
     Rsync:
-      Path: /tank/Media/Pictures
+      ReceiveFrom:
+        - tank
+      Path: /tank/Pictures

@@ -1,20 +1,21 @@
 Name:     'Archives'
-Priority: 160
+Priority: 142
 Class:    'large,data,annex'
 
 Stores:
-  hermes:
-    Annex:
-      Path: /Volumes/My Book/Archives
+  vulcan:
+    Rsync:
+      SendOnly: true
+      Path: /Users/johnw/Archives
+  
+  mybook:
+    Path: /Volumes/mybook/Archives
+  
+  tank:
+    Path: /Volumes/tank/Archives
   
   titan:
-    Annex:
-      Path: /tank/Archives/
-
-Options:
-  Rsync:
-    Filters:
-      - '- /Games'
-      - '- /Games/'
-      - '- /Systems'
-      - '- /Systems/'
+    Rsync:
+      ReceiveFrom:
+        - tank
+      Path: /tank/Archives

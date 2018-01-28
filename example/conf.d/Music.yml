@@ -1,0 +1,35 @@
+Name:     'Music'
+Priority: 140
+Class:    'quick,main,sync'
+
+Stores:
+  vulcan:
+    Rsync:
+      ReceiveOnly: true
+      Path: /Users/johnw/Music
+
+  mybook:
+    Path: /Volumes/mybook/Music
+  
+  tank:
+    Path: /Volumes/tank/Music
+  
+  vault:
+    Rsync:
+      ReceiveFrom:
+        - vulcan
+        - hermes
+      Path: /Volumes/vault/Music
+
+  hermes:
+    Rsync:
+      SendOnly: true
+      Path: /Users/johnw/Music
+  
+  titan:
+    Path: /tank/Music
+
+Options:
+  Rsync:
+    ReceiveFrom:
+      - hermes
