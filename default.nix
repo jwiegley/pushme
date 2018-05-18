@@ -33,14 +33,26 @@ let inherit (nixpkgs) pkgs;
                 overrides))
           .callCabal2nix (builtins.baseNameOf root) root {};
         in if provideDrv then modifier drv else (modifier drv).env;
+
+      pipes-group = doJailbreak super.pipes-group;
+      text-format = doJailbreak super.text-format;
+      enclosed-exceptions =
+        if compiler == "ghc842"
+        then dontCheck super.enclosed-exceptions
+        else super enclosed-exceptions;
     };
   });
 
 in haskellPackages.developPackage {
   root = ./.;
 
-  source-overrides = {
-  };
+  source-overrides =
+    if compiler == "ghc802"
+    then {
+      lens-family-core = "1.2.1";
+      lens-family = "1.2.1";
+    }
+    else {};
 
   modifier = drv: pkgs.haskell.lib.overrideCabal drv (attrs: {
     enableLibraryProfiling    = doProfiling;
