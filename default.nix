@@ -39,7 +39,7 @@ let inherit (nixpkgs) pkgs;
       enclosed-exceptions =
         if compiler == "ghc842"
         then dontCheck super.enclosed-exceptions
-        else super enclosed-exceptions;
+        else super.enclosed-exceptions;
     };
   });
 
