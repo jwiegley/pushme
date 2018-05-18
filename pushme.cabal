@@ -1,8 +1,8 @@
--- This file has been generated from package.yaml by hpack version 0.21.2.
+-- This file has been generated from package.yaml by hpack version 0.27.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d558e8523ac976947d8764b9f7483a8cd4851c81f7dd458bc4fe88f3b3ac7855
+-- hash: 9f82a9bcb12d10a26d49e395cb3fa9432de33bb8b07d46c27f1daebfc41416d6
 
 name:           pushme
 version:        2.1.2
@@ -28,7 +28,7 @@ source-repository head
 executable pushme
   main-is: Main.hs
   other-modules:
-      Paths_pushme
+      Pushme.Options
   ghc-options: -threaded
   build-depends:
       aeson

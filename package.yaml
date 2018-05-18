@@ -48,3 +48,5 @@ executables:
   pushme:
     main: Main.hs
     ghc-options: -threaded
+    other-modules:
+      - Pushme.Options
