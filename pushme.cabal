@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9f82a9bcb12d10a26d49e395cb3fa9432de33bb8b07d46c27f1daebfc41416d6
+-- hash: 312152faf671acc95cbe3829a3cef4020d3e14f1b27db6669600a630763cc4e6
 
 name:           pushme
 version:        2.1.2
@@ -49,10 +49,10 @@ executable pushme
     , pipes-text
     , regex-posix >=0.95 && <1.0
     , safe >=0.3 && <0.4
-    , shelly >=1.6 && <1.8
+    , shelly >=1.6 && <2.0
     , system-fileio >=0.3 && <0.4
     , system-filepath >=0.4 && <0.5
-    , temporary >=1.2 && <1.3
+    , temporary >=1.2 && <2.0
     , text >=1.2 && <1.3
     , text-format >=0.3 && <0.4
     , time >=1.4 && <2.0
