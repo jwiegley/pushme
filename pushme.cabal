@@ -1,11 +1,11 @@
--- This file has been generated from package.yaml by hpack version 0.27.0.
+-- This file has been generated from package.yaml by hpack version 0.28.2.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 312152faf671acc95cbe3829a3cef4020d3e14f1b27db6669600a630763cc4e6
+-- hash: abf40cc11ead58c2c28cd6cc91c5b6a82de8e5bdc28651c2f416b9da9fb8b397
 
 name:           pushme
-version:        2.1.2
+version:        2.1.3
 synopsis:       Tool to synchronize directories with rsync, zfs or git-annex
 description:    Script I use for synchronizing data among machines.
 category:       System
@@ -17,7 +17,6 @@ license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
-
 extra-source-files:
     README.md
 
