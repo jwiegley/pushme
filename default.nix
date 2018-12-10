@@ -1,9 +1,9 @@
-{ compiler    ? "ghc822"
+{ compiler    ? "ghc844"
 , doBenchmark ? false
 , doTracing   ? false
 , doStrict    ? false
-, rev         ? "d1ae60cbad7a49874310de91cd17708b042400c8"
-, sha256      ? "0a1w4702jlycg2ab87m7n8frjjngf0cis40lyxm3vdwn7p4fxikz"
+, rev         ? "3f3f6021593070330091a4a2bc785f6761bbb3c1"
+, sha256      ? "1a7vvxxz8phff51vwsrdlsq5i70ig5hxvvb7lkm2lgwizgvpa6gv"
 , pkgs        ? import (builtins.fetchTarball {
     url = "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz";
     inherit sha256; }) {
@@ -18,6 +18,10 @@ let haskellPackages = pkgs.haskell.packages.${compiler};
 
 in haskellPackages.developPackage {
   root = ./.;
+
+  overrides = self: super: {
+    pipes-text = pkgs.haskell.lib.doJailbreak super.pipes-text;
+  };
 
   source-overrides = {
   };
