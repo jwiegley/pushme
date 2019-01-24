@@ -1,0 +1,32 @@
+Hosts:
+  vulcan:
+    Aliases:
+    - home
+    Services:
+    - Ssh:
+        HostName: 76.234.69.149
+        User: johnw
+        Port: 2201
+
+Filesets:
+  Documents:
+    Priority: 12
+    Class:
+    - quick
+    - main
+    - sync
+
+    Conditions:
+      ReceiveFrom:
+      - hermes
+
+    Stores:
+      vulcan:
+        Path: '/Users/johnw/Documents'
+        Conditions:
+          ReceiveFrom:
+          - hermes
+          SendTo:
+          - hermes
+          Filters:
+          - '- *~'

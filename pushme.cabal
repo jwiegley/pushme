@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1d18f1e34626d1338f607c11c89f221407ec54628771c1c1eeef648ae7f27ab6
+-- hash: 2d23d21de1ced71d015a223fbbc3949c2d33f3460687de1c389b923649122f24
 
 name:           pushme
 version:        2.1.3
@@ -46,6 +46,44 @@ executable pushme
     , pipes-group
     , pipes-safe
     , pipes-text
+    , regex-posix >=0.95 && <1.0
+    , safe >=0.3 && <0.4
+    , shelly >=1.6 && <2.0
+    , system-fileio >=0.3 && <0.4
+    , system-filepath >=0.4 && <0.5
+    , temporary >=1.2 && <2.0
+    , text >=1.2 && <1.3
+    , time >=1.4 && <2.0
+    , transformers >=0.3 && <0.6
+    , unix >=2.6 && <2.8
+    , unordered-containers >=0.2 && <0.3
+    , yaml
+  default-language: Haskell2010
+
+executable pushme-new
+  main-is: New.hs
+  other-modules:
+      Pushme.Options
+  ghc-options: -threaded
+  build-depends:
+      aeson
+    , base >=4.7 && <5.0
+    , bytestring >=0.10 && <0.11
+    , containers >=0.5 && <0.6
+    , foldl
+    , io-storage >=0.3 && <0.4
+    , lens >=4.9 && <5.0
+    , logging >=3.0 && <3.1
+    , monad-logger >=0.3 && <0.4
+    , mtl
+    , old-locale >=1.0 && <1.1
+    , optparse-applicative >=0.10 && <1.0
+    , parallel-io >=0.3 && <0.4
+    , pipes
+    , pipes-group
+    , pipes-safe
+    , pipes-text
+    , pretty-show
     , regex-posix >=0.95 && <1.0
     , safe >=0.3 && <0.4
     , shelly >=1.6 && <2.0

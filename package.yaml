@@ -49,3 +49,12 @@ executables:
     ghc-options: -threaded
     other-modules:
       - Pushme.Options
+
+  pushme-new:
+    main: New.hs
+    ghc-options: -threaded
+    other-modules:
+      - Pushme.Options
+    dependencies:
+      - pretty-show
+      - mtl
