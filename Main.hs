@@ -30,9 +30,6 @@ import           Data.Monoid ((<>), mempty)
 import           Data.Ord (comparing)
 import           Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
-import qualified Data.Text.Format as Fmt
-import qualified Data.Text.Format.Params as Fmt
-import           Data.Text.Lazy (toStrict)
 import           Data.Yaml (decode)
 import           Filesystem
 import           Filesystem.Path.CurrentOS hiding (null, concat)
@@ -400,17 +397,18 @@ snapshotBinding bnd@((^? that.zfsScheme) -> Just z) = do
     let nextRev = maybe 1 succ mrev
         thatSnapshot =
             toTextIgnore $ z^.zfsPoolPath <> "@" <> decodeString (show nextRev)
-    liftIO $ log' $ format "Creating snapshot {}" [thatSnapshot]
+    liftIO $ log' $ "Creating snapshot " <> thatSnapshot
     execute_ (env bnd) "zfs" ["snapshot", thatSnapshot]
 snapshotBinding _ = return ()
 
 syncBinding :: Binding -> App ()
 syncBinding bnd = errExit False $ do
-    liftIO $ log' $ format "Sending {}/{} -> {}"
-        [ bnd^.source.hostName
-        , bnd^.fileset.fsName
-        , bnd^.target.hostName
-        ]
+    liftIO $ log' $ "Sending "
+        <> (bnd^.source.hostName)
+        <> "/"
+        <> (bnd^.fileset.fsName)
+        <> " -> "
+        <> (bnd^.target.hostName)
     syncStores bnd (bnd^.this) (bnd^.that)
 
 syncStores :: Binding -> Store -> Store -> App ()
@@ -469,8 +467,7 @@ syncAnnexSchemes bnd a1 a2 = do
         -- Sync to the destination.
         runner2_ "git-annex" $ ["-q" | not (verbose opts)] <> ["sync"]
 
-        liftIO $ log' $ format "{}: Git Annex synchronized"
-            [ bnd^.fileset.fsName ]
+        liftIO $ log' $ (bnd^.fileset.fsName) <> ": Git Annex synchronized"
 
         else liftIO $ warn $ "Remote directory missing: "
                  <> toTextIgnore (a2^.annexPath)
@@ -547,7 +544,7 @@ syncUsingRsync bnd s1 s2 = do
             (fromMaybe (defaultRsync r) (s2^?rsyncScheme))
             (case h of
                   Nothing   -> toTextIgnore r
-                  Just targ -> format "{}:{}" [targ, toTextIgnore r])
+                  Just targ -> targ <> ":" <> toTextIgnore r)
 
         else do
             liftIO $ warn $ "Either local directory missing: " <> toTextIgnore l
@@ -572,18 +569,17 @@ rsync bnd srcRsync src destRsync dest =
         opts <- ask
         let analyze = not (verbose opts) && not (noSync opts)
         when analyze $
-            liftIO $ log' $ format
-                "{}: \ESC[34mSkipped: {}\ESC[34m\ESC[0m"
-                [ fs^.fsName
-                , if srcRsync^.rsyncReceiveOnly
-                  then "<- ReceiveOnly"
-                  else if destRsync^.rsyncSendOnly
+            liftIO $ log' $ (fs^.fsName)
+                <> ": \ESC[34mSkipped: "
+                <> (if srcRsync^.rsyncReceiveOnly
+                    then "<- ReceiveOnly"
+                    else if destRsync^.rsyncSendOnly
                        then "-> SendOnly"
                        else if maybe False (not . (bnd^.source.hostName `elem`))
                                            (destRsync^.rsyncReceiveFrom)
                             then "! ReceiveFrom"
-                            else "Unknown"
-                ]
+                            else "Unknown")
+                <> "\ESC[34m\ESC[0m"
     else do
         let rfs   = (srcRsync^.rsyncFilters) <> (destRsync^.rsyncFilters)
             nol   = (srcRsync^.rsyncNoLinks) || (destRsync^.rsyncNoLinks)
@@ -609,7 +605,7 @@ reportMissingFiles fs r =
                >-> P.map (T.drop len . toTextIgnore)
                >-> P.catch (P.filter (\x -> not (any (matchText x) patterns)))
                            (\(_ :: SomeException) -> P.cat))
-        $ \f -> liftIO $ warn' $ format "{}: unknown: \"{}\"" [label, f]
+        $ \f -> liftIO $ warn' $ label <> ": unknown: \"" <> f <> "\""
   where
     label   = fs^.fsName
     rpath   = asDirectory (r^.rsyncPath)
@@ -696,15 +692,16 @@ doRsync label options src dest noLinks = do
                 <|> field "Number of files transferred" stats
             total = field "Total file size" stats
             xfer  = field "Total transferred file size" stats
-        liftIO $ log' $ format
-            ("{}: \ESC[34mSent \ESC[35m{}\ESC[0m\ESC[34m "
-                <> "in {} files\ESC[0m (out of {} in {})")
-            [ label
-            , humanReadable den (fromMaybe 0 xfer)
-            , commaSep (fromIntegral (fromMaybe 0 sent))
-            , humanReadable den (fromMaybe 0 total)
-            , commaSep (fromIntegral (fromMaybe 0 files))
-            ]
+        liftIO $ log' $ label
+            <> ": \ESC[34mSent \ESC[35m"
+            <> humanReadable den (fromMaybe 0 xfer)
+            <> "\ESC[0m\ESC[34m in "
+            <> commaSep (fromIntegral (fromMaybe 0 sent))
+            <> " files\ESC[0m (out of "
+            <> humanReadable den (fromMaybe 0 total)
+            <> " in "
+            <> commaSep (fromIntegral (fromMaybe 0 files))
+            <> ")"
   where
     field :: Text -> M.Map Text Text -> Maybe Integer
     field x stats = read . unpack <$> M.lookup x stats
@@ -752,11 +749,10 @@ execute ExeEnv {..} name args = do
         else do
             let (sshCmd:sshArgs) = words (encodeString name'')
             n <- findCmd (decodeString sshCmd)
-            liftIO $ debug' $ format "{} {}"
-                [ toTextIgnore n
-                , T.intercalate " "
-                      (map tshow (map T.pack sshArgs ++ args''))
-                ]
+            liftIO $ debug' $ toTextIgnore n
+               <> " "
+               <> T.intercalate " "
+                    (map tshow (map T.pack sshArgs ++ args''))
             runner' n args''
   where
     findCmd n
@@ -807,9 +803,6 @@ matchText x y = unpack x =~ unpack y
 
 tshow :: Show a => a -> Text
 tshow = pack . show
-
-format :: Fmt.Params a => Fmt.Format -> a -> Text
-format = (toStrict .) . Fmt.format
 
 humanReadable :: Integer -> Integer -> Text
 humanReadable den x =
