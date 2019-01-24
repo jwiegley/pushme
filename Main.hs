@@ -20,7 +20,6 @@ import           Control.Logging
 import           Control.Monad
 import           Control.Monad.Trans.Reader
 import           Data.Aeson hiding (Options)
-import qualified Data.ByteString as B (readFile)
 import           Data.Char (isDigit)
 import           Data.List
 import           Data.Map (Map)
@@ -30,7 +29,7 @@ import           Data.Monoid ((<>), mempty)
 import           Data.Ord (comparing)
 import           Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
-import           Data.Yaml (decode)
+import           Data.Yaml (decodeFileEither)
 import           Filesystem
 import           Filesystem.Path.CurrentOS hiding (null, concat)
 import           GHC.Conc (setNumCapabilities)
@@ -315,10 +314,11 @@ readFilesets opts = do
 
 readDataFile :: FromJSON a => FilePath -> IO a
 readDataFile p = do
-    d  <- Data.Yaml.decode <$> B.readFile (encodeString p)
+    d <- Data.Yaml.decodeFileEither (encodeString p)
     case d of
-        Nothing -> errorL $ "Failed to read file " <> toTextIgnore p
-        Just d' -> return d'
+        Left err -> errorL $ "Failed to read file '" <> toTextIgnore p
+          <> "': " <> pack (show err)
+        Right d' -> return d'
 
 processBindings :: Options -> Map Text Host -> IO ()
 processBindings opts hosts = do
