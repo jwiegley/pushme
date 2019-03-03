@@ -19,7 +19,7 @@ dependencies:
   - pipes-safe
   - pipes-text
   - foldl
-  - containers           >= 0.5  && < 0.6
+  - containers           >= 0.5  && < 1.0
   - io-storage           >= 0.3  && < 0.4
   - lens                 >= 4.9  && < 5.0
   - logging              >= 3.0  && < 3.1
