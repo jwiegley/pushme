@@ -581,7 +581,7 @@ rsync bnd srcRsync src destRsync dest =
                             else "Unknown")
                 <> "\ESC[34m\ESC[0m"
     else do
-        let rfs   = (srcRsync^.rsyncFilters) <> (destRsync^.rsyncFilters)
+        let rfs   = (destRsync^.rsyncFilters) <> (srcRsync^.rsyncFilters)
             nol   = (srcRsync^.rsyncNoLinks) || (destRsync^.rsyncNoLinks)
             go xs = doRsync (fs^.fsName) xs (toTextIgnore src) dest nol
         case rfs of
