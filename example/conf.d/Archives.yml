@@ -3,19 +3,17 @@ Priority: 142
 Class:    'large,data,annex'
 
 Stores:
+  hermes:
+    Rsync:
+      SendOnly: true
+      Path: /Users/johnw/Archives
+  
   vulcan:
     Rsync:
       SendOnly: true
       Path: /Users/johnw/Archives
   
-  mybook:
-    Path: /Volumes/mybook/Archives
-  
   tank:
-    Path: /Volumes/tank/Archives
-  
-  titan:
     Rsync:
-      ReceiveFrom:
-        - tank
-      Path: /tank/Archives
+      SendOnly: true
+      Path: /Volumes/tank/Archives

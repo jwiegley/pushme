@@ -3,16 +3,5 @@ Priority: 410
 Class:    'large,data'
 
 Stores:
-  mybook:
-    Path: /Volumes/mybook/Movies
-  
   tank:
     Path: /Volumes/tank/Movies
-  
-  titan:
-    Path: /tank/Movies
-
-Options:
-  Rsync:
-    ReceiveFrom:
-      - tank

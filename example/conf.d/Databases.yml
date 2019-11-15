@@ -9,9 +9,6 @@ Stores:
         - hermes
       Path: /Users/johnw/Databases
 
-  mybook:
-    Path: /Volumes/mybook/Databases
-  
   tank:
     Path: /Volumes/tank/Databases
   
@@ -27,9 +24,3 @@ Stores:
       ReceiveFrom:
         - vulcan
       Path: /Users/johnw/Databases
-  
-  titan:
-    Rsync:
-      ReceiveFrom:
-        - tank
-      Path: /tank/Databases

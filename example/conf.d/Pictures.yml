@@ -5,7 +5,6 @@ Class:    'large,data,annex'
 Stores:
   vulcan:
     Rsync:
-      SendOnly: true
       Path: /Users/johnw/Pictures
       Filters:
         - '+ /*.mpcatalog'
@@ -15,14 +14,16 @@ Stores:
         - '- /.*'
         - '- /.*/'
 
-  mybook:
-    Path: /Volumes/mybook/Pictures
-  
+  hermes:
+    Rsync:
+      Path: /Users/johnw/Pictures
+      Filters:
+        - '+ /*.mpcatalog'
+        - '+ /*.photoslibrary/'
+        - '- /*'
+        - '- /*/'
+        - '- /.*'
+        - '- /.*/'
+
   tank:
     Path: /Volumes/tank/Pictures
-  
-  titan:
-    Rsync:
-      ReceiveFrom:
-        - tank
-      Path: /tank/Pictures

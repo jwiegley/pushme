@@ -3,11 +3,9 @@ Priority: 142
 Class:    'large,data,annex'
 
 Stores:
-  mybook:
-    Path: /Volumes/mybook/iTunes
-  
   tank:
     Path: /Volumes/tank/iTunes
-  
-  titan:
-    Path: /tank/iTunes
+
+  vulcan:
+    Path: /Users/johnw/Music/iTunes/iTunes Media
+

@@ -7,11 +7,9 @@ Stores:
     Rsync:
       ReceiveFrom:
         - hermes
+        - fin
       Path: /Users/johnw
   
-  mybook:
-    Path: /Volumes/mybook/Home
-
   tank:
     Path: /Volumes/tank/Home
 
@@ -20,6 +18,7 @@ Stores:
       ReceiveFrom:
         - vulcan
         - hermes
+        - fin
       Path: /Volumes/vault/Home
 
   hermes:
@@ -28,26 +27,67 @@ Stores:
         - vulcan
       Path: /Users/johnw
   
-  titan:
+  fin:
     Rsync:
       ReceiveFrom:
-        - tank
-      Path: /tank/Home
+        - vulcan
+      Path: /Users/johnw
   
 Options:
   Rsync:
     NoLinks: true
     Filters:
-      - '+ /.Deskzilla/'
-      - '+ /.bash_history'
-      - '+ /.cabal/'
-      - '- /.cache/'
+      - '+ /.JIRAClient'
+      - '+ /.aws/'
       - '+ /.config/'
-      - '+ /.dbvis/'
       - '+ /.emacs.d'
+      - '+ /.jira.d/'
       - '+ /.local/'
-      - '- /.local/Trash/'
+      - '+ /.org-jira/'
+      - '+ /.parallel/'
       - '+ /.ssh/'
+      - '+ /.travis/'
+      - '+ /.z'
+      - '+ /.zcompdump'
+      - '+ /.zsh_history'
+      - '- /.bash_profile'
+      - '- /.bashrc'
+      - '- /.cache/'
+      - '- /.config/aspell/config'
+      - '- /.config/fetchmail/config'
+      - '- /.config/fetchmail/config-lists'
+      - '- /.config/fetchmail/config-work'
+      - '- /.config/git/config'
+      - '- /.config/git/ignore'
+      - '- /.config/gnupg/gpg-agent.conf'
+      - '- /.config/gnupg/private-keys-v1.d/4975B4558FC5A7699D4E6DFD940DF0A5633B661F.key'
+      - '- /.config/gnupg/private-keys-v1.d/99C79A2052C3B513DF26BB5B03519C83328F13E1.key'
+      - '- /.config/gnupg/private-keys-v1.d/A8ADF3692CFDEA476DD3EF8191DF7C5806C0C825.key'
+      - '- /.config/gnupg/scdaemon-wrapper'
+      - '- /.config/msmtp'
+      - '- /.config/recoll/mimeview'
+      - '- /.config/znc/'
+      - '- /.config/znc/modules/znc'
+      - '- /.config/zsh/.zprofile'
+      - '- /.config/zsh/.zshenv'
+      - '- /.config/zsh/.zshrc'
+      - '- /.config/zsh/plugins/'
+      - '- /.curlrc'
+      - '- /.dbvis'
+      - '- /.docker'
+      - '- /.gist'
+      - '- /.ledgerrc'
+      - '- /.nix-profile'
+      - '- /.profile'
+      - '- /.recoll'
+      - '- /.slate'
+      - '- /.ssh/config'
+      - '- /.zekr'
+      - '- /.zshenv'
+      - '- /Applications'
+      - '+ /dl'
+      - '- /tank'
+      - '- /tank/'
       - '- /*'
       - '- /*/'
       - '- /.*'

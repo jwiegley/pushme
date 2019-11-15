@@ -1,7 +1,7 @@
-Name:     'Games'
+Name:     'Cache'
 Priority: 410
 Class:    'large,data'
 
 Stores:
   tank:
-    Path: /Volumes/tank/Games
+    Path: /Volumes/tank/Cache

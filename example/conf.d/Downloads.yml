@@ -7,11 +7,9 @@ Stores:
     Rsync:
       ReceiveFrom:
         - hermes
+        - fin
       Path: /Users/johnw/Downloads
   
-  mybook:
-    Path: /Volumes/mybook/Downloads
-
   tank:
     Path: /Volumes/tank/Downloads
 
@@ -20,6 +18,7 @@ Stores:
       ReceiveFrom:
         - vulcan
         - hermes
+        - fin
       Path: /Volumes/vault/Downloads
 
   hermes:
@@ -27,13 +26,13 @@ Stores:
       ReceiveFrom:
         - vulcan
       Path: /Users/johnw/Downloads
-  
-  titan:
+
+  fin:
     Rsync:
       ReceiveFrom:
-        - tank
-      Path: /tank/Downloads
-
+        - vulcan
+      Path: /Users/johnw/Downloads
+  
 Options:
   Rsync:
     Filters:

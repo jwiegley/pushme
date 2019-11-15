@@ -16,19 +16,5 @@ Stores:
         - '- /.*'
         - '- /.*/'
 
-  mybook:
-    Path: /Volumes/mybook/Machines
-  
   tank:
     Path: /Volumes/tank/Machines
-  
-  hermes:
-    Rsync:
-      SendOnly: true
-      Path: /Users/johnw/Machines
-  
-  titan:
-    Rsync:
-      ReceiveFrom:
-        - tank
-      Path: /tank/Machines

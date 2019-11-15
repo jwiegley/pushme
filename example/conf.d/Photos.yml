@@ -3,16 +3,5 @@ Priority: 130
 Class:    'large,data'
 
 Stores:
-  mybook:
-    Path: /Volumes/mybook/Photos
-
   tank:
     Path: /Volumes/tank/Photos
-
-  titan:
-    Path: /tank/Photos
-
-Options:
-  Rsync:
-    ReceiveFrom:
-      - tank

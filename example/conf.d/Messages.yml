@@ -7,11 +7,9 @@ Stores:
     Rsync:
       ReceiveFrom:
         - hermes
+        - fin
       Path: /Users/johnw/Messages
   
-  mybook:
-    Path: /Volumes/mybook/Messages
-
   tank:
     Path: /Volumes/tank/Messages
 
@@ -20,6 +18,7 @@ Stores:
       ReceiveFrom:
         - vulcan
         - hermes
+        - fin
       Path: /Volumes/vault/Messages
 
   hermes:
@@ -27,13 +26,13 @@ Stores:
       ReceiveFrom:
         - vulcan
       Path: /Users/johnw/Messages
-  
-  titan:
+
+  fin:
     Rsync:
       ReceiveFrom:
-        - tank
-      Path: /tank/Messages
-
+        - vulcan
+      Path: /Users/johnw/Messages
+  
 Options:
   Rsync:
     Filters:
