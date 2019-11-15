@@ -5,14 +5,13 @@ Class:    'quick,main,sync'
 Stores:
   vulcan:
     Rsync:
-      ReceiveOnly: true
+      SendOnly: true
       Path: /Users/johnw/Music
 
-  mybook:
-    Path: /Volumes/mybook/Music
-  
   tank:
-    Path: /Volumes/tank/Music
+    Rsync:
+      ReceiveOnly: true
+      Path: /Volumes/tank/Music
   
   vault:
     Rsync:
@@ -23,13 +22,10 @@ Stores:
 
   hermes:
     Rsync:
-      SendOnly: true
+      ReceiveOnly: true
       Path: /Users/johnw/Music
-  
-  titan:
-    Path: /tank/Music
 
 Options:
   Rsync:
-    ReceiveFrom:
-      - hermes
+    Filters:
+      - '- /iTunes/iTunes Media/'

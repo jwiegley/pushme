@@ -1,37 +1,35 @@
-Name:     'src'
-Priority: 5
-Class:    'quick,main,sync'
+Name:     'dfinity'
+Priority: 9
+Class:    'data,sync'
 
 Stores:
   vulcan:
     Rsync:
       ReceiveFrom:
         - hermes
-        - fin
-      Path: /Users/johnw/src
-
-  tank:
-    Path: /Volumes/tank/src
+      Path: /Users/johnw/dfinity
   
+  tank:
+    Path: /Volumes/tank/dfinity
+
   vault:
     Rsync:
       ReceiveFrom:
         - vulcan
         - hermes
-        - fin
-      Path: /Volumes/vault/src
+      Path: /Volumes/vault/dfinity
 
   hermes:
     Rsync:
       ReceiveFrom:
         - vulcan
-      Path: /Users/johnw/src
+      Path: /Users/johnw/dfinity
 
   fin:
     Rsync:
       ReceiveFrom:
         - vulcan
-      Path: /Users/johnw/src
+      Path: /Users/johnw/dfinity
 
 Options:
   Rsync:
@@ -47,14 +45,13 @@ Options:
       - '- .direnv/'
       - '- .ghc.*'
       - '- .hsenvs/'
-      - '- /kadena/balCheck.yaml'
-      - '- /kadena/balance.csv'
-      - '- /kadena/balance.log'
-      - '- /kadena/pact.tix'
+      - '- /consensus-model/src/states/'
+      - '- /dev/master/hs-dfinity-integration/run/'
+      - '- /dev/stress/'
       - '- TAGS'
       - '- cabal-dev/'
       - '- cabal.project*'
       - '- dist-newstyle/'
       - '- dist/'
-      - '- result*'
+      - '- result-*'
       - '- target/'

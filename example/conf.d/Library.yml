@@ -7,42 +7,48 @@ Stores:
     Rsync:
       ReceiveFrom:
         - hermes
+        - fin
       Path: /Users/johnw/Library
   
-  mybook:
-    Path: /Volumes/mybook/Library
-
   tank:
-    Path: /Volumes/tank/Library
+    Rsync:
+      Path: /Volumes/tank/Library
+      Filters:
+        - '+ /Mobile Documents/'
 
   vault:
     Rsync:
       ReceiveFrom:
         - vulcan
         - hermes
+        - fin
       Path: /Volumes/vault/Library
+      Filters:
+        - '+ /Mobile Documents/'
 
   hermes:
     Rsync:
       ReceiveFrom:
         - vulcan
       Path: /Users/johnw/Library
-  
-  titan:
+
+  fin:
     Rsync:
       ReceiveFrom:
-        - tank
-      Path: /tank/Library
-
+        - vulcan
+      Path: /Users/johnw/Library
+  
 Options:
   Rsync:
     Filters:
       - '+ /Application Support/'
       - '+ /Application Support/borderlands 2/'
       - '+ /Application Support/Borderlands The Pre-Sequel/'
+      - '+ /Application Support/Boxer/'
       - '+ /Application Support/DEVONagent/'
       - '+ /Application Support/DEVONthink Pro 2/'
       - '+ /Application Support/Feral Interactive/'
+      - '+ /Application Support/gzdoom/'
       - '+ /Application Support/HandBrake/'
       - '+ /Application Support/iDefrag/'
       - '+ /Application Support/LaunchBar/'
@@ -57,9 +63,13 @@ Options:
       - '+ /Fonts/'
       - '+ /Preferences/'
       - '+ /Preferences/at.obdev.LaunchBar.plist'
+      - '+ /Preferences/com.almworks.jiraclient.plist'
       - '+ /Preferences/com.chungwasoft.Shimo.plist'
       - '+ /Preferences/com.cocoatech.PathFinder.plist'
+      - '+ /Preferences/com.devon-technologies.thinkpro2.plist'
       - '+ /Preferences/com.googlecode.iterm2.plist'
+      - '+ /Preferences/com.gog.*'
+      - '+ /Preferences/gzdoom.ini'
       - '+ /Preferences/org.m0k.transmission.plist'
       - '- /Preferences/*'
       - '- /Preferences/*/'

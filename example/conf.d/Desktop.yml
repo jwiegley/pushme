@@ -5,13 +5,11 @@ Class:    'quick,main,sync'
 Stores:
   vulcan:
     Rsync:
-      ReceiveFrom:
-        - hermes
+      SendOnly: true
+      # ReceiveFrom:
+      #   - hermes
       Path: /Users/johnw/Desktop
 
-  mybook:
-    Path: /Volumes/mybook/Desktop
-  
   tank:
     Path: /Volumes/tank/Desktop
   
@@ -20,16 +18,18 @@ Stores:
       ReceiveFrom:
         - vulcan
         - hermes
+        - fin
       Path: /Volumes/vault/Desktop
 
   hermes:
     Rsync:
+      SendOnly: true
+      # ReceiveFrom:
+      #   - vulcan
+      Path: /Users/johnw/Desktop
+
+  fin:
+    Rsync:
       ReceiveFrom:
         - vulcan
       Path: /Users/johnw/Desktop
-  
-  titan:
-    Rsync:
-      ReceiveFrom:
-        - tank
-      Path: /tank/Desktop

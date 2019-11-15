@@ -3,18 +3,5 @@ Priority: 410
 Class:    'large,data'
 
 Stores:
-  mybook:
-    Rsync:
-      SendOnly: true
-      Path: /Volumes/mybook/Audio
-  
   tank:
-    Rsync:
-      SendOnly: true
-      Path: /Volumes/tank/Audio
-  
-  titan:
-    Rsync:
-      ReceiveFrom:
-        - tank
-      Path: /tank/Audio
+    Path: /Volumes/tank/Audio
