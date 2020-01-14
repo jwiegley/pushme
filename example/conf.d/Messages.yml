@@ -7,7 +7,7 @@ Stores:
     Rsync:
       ReceiveFrom:
         - hermes
-        - fin
+        - athena
       Path: /Users/johnw/Messages
   
   tank:
@@ -18,7 +18,7 @@ Stores:
       ReceiveFrom:
         - vulcan
         - hermes
-        - fin
+        - athena
       Path: /Volumes/vault/Messages
 
   hermes:
@@ -27,12 +27,12 @@ Stores:
         - vulcan
       Path: /Users/johnw/Messages
 
-  fin:
+  athena:
     Rsync:
       ReceiveFrom:
         - vulcan
       Path: /Users/johnw/Messages
-  
+
 Options:
   Rsync:
     Filters:

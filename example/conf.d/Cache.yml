@@ -1,7 +1,0 @@
-Name:     'Cache'
-Priority: 410
-Class:    'large,data'
-
-Stores:
-  tank:
-    Path: /Volumes/tank/Cache

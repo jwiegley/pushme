@@ -1,7 +1,0 @@
-Name:     'Games'
-Priority: 410
-Class:    'large,data'
-
-Stores:
-  tank:
-    Path: /Volumes/tank/Games

@@ -8,9 +8,8 @@ Stores:
       SendOnly: true
       Path: /Users/johnw/Machines
       Filters:
-        - '+ /Fiat.vmwarevm/'
-        - '+ /PetaLinux.vmwarevm/'
-        - '+ /Windows 7 Ultimate x64.vmwarevm'
+        - '+ /Windows 7 Ultimate x64.vmwarevm/'
+        - '+ /Apple II.sparsebundle/'
         - '- /*'
         - '- /*/'
         - '- /.*'

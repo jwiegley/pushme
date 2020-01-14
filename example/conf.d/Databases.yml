@@ -7,6 +7,7 @@ Stores:
     Rsync:
       ReceiveFrom:
         - hermes
+        - athena
       Path: /Users/johnw/Databases
 
   tank:
@@ -17,9 +18,16 @@ Stores:
       ReceiveFrom:
         - vulcan
         - hermes
+        - athena
       Path: /Volumes/vault/Databases
 
   hermes:
+    Rsync:
+      ReceiveFrom:
+        - vulcan
+      Path: /Users/johnw/Databases
+
+  athena:
     Rsync:
       ReceiveFrom:
         - vulcan

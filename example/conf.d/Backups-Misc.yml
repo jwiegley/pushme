@@ -1,7 +1,0 @@
-Name:     'Backups-Misc'
-Priority: 200
-Class:    'large,data'
-
-Stores:
-  tank:
-    Path: /Volumes/tank/Backups/Misc

@@ -7,7 +7,7 @@ Stores:
     Rsync:
       ReceiveFrom:
         - hermes
-        - fin
+        - athena
       Path: /Users/johnw
   
   tank:
@@ -18,7 +18,7 @@ Stores:
       ReceiveFrom:
         - vulcan
         - hermes
-        - fin
+        - athena
       Path: /Volumes/vault/Home
 
   hermes:
@@ -26,8 +26,8 @@ Stores:
       ReceiveFrom:
         - vulcan
       Path: /Users/johnw
-  
-  fin:
+
+  athena:
     Rsync:
       ReceiveFrom:
         - vulcan
@@ -82,6 +82,7 @@ Options:
       - '- /.recoll'
       - '- /.slate'
       - '- /.ssh/config'
+      - '- /.yubico/'
       - '- /.zekr'
       - '- /.zshenv'
       - '- /Applications'

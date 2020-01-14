@@ -1,7 +1,0 @@
-Name:     'Backups-Servers'
-Priority: 200
-Class:    'large,data'
-
-Stores:
-  tank:
-    Path: /Volumes/tank/Backups/Servers

@@ -7,25 +7,16 @@ Stores:
     Rsync:
       ReceiveFrom:
         - hermes
+        - athena
       Path: /Users/johnw/dfinity
   
-  tank:
-    Path: /Volumes/tank/dfinity
-
-  vault:
-    Rsync:
-      ReceiveFrom:
-        - vulcan
-        - hermes
-      Path: /Volumes/vault/dfinity
-
   hermes:
     Rsync:
       ReceiveFrom:
         - vulcan
       Path: /Users/johnw/dfinity
 
-  fin:
+  athena:
     Rsync:
       ReceiveFrom:
         - vulcan

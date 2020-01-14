@@ -1,7 +1,0 @@
-Name:     'Media'
-Priority: 410
-Class:    'large,data'
-
-Stores:
-  tank:
-    Path: /Volumes/tank/Media

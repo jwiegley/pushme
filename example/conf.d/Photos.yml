@@ -1,7 +1,0 @@
-Name:     'Photos'
-Priority: 130
-Class:    'large,data'
-
-Stores:
-  tank:
-    Path: /Volumes/tank/Photos

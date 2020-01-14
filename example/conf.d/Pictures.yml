@@ -5,25 +5,20 @@ Class:    'large,data,annex'
 Stores:
   vulcan:
     Rsync:
+      SendOnly: true
       Path: /Users/johnw/Pictures
-      Filters:
-        - '+ /*.mpcatalog'
-        - '+ /*.photoslibrary/'
-        - '- /*'
-        - '- /*/'
-        - '- /.*'
-        - '- /.*/'
 
   hermes:
     Rsync:
+      SendOnly: true
       Path: /Users/johnw/Pictures
-      Filters:
-        - '+ /*.mpcatalog'
-        - '+ /*.photoslibrary/'
-        - '- /*'
-        - '- /*/'
-        - '- /.*'
-        - '- /.*/'
+
+  athena:
+    Rsync:
+      SendOnly: true
+      Path: /Users/johnw/Pictures
 
   tank:
-    Path: /Volumes/tank/Pictures
+    Rsync:
+      ReceiveOnly: true
+      Path: /Volumes/tank/Pictures

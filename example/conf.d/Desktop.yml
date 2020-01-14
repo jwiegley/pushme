@@ -8,6 +8,7 @@ Stores:
       SendOnly: true
       # ReceiveFrom:
       #   - hermes
+      #   - athena
       Path: /Users/johnw/Desktop
 
   tank:
@@ -18,7 +19,7 @@ Stores:
       ReceiveFrom:
         - vulcan
         - hermes
-        - fin
+        - athena
       Path: /Volumes/vault/Desktop
 
   hermes:
@@ -28,8 +29,9 @@ Stores:
       #   - vulcan
       Path: /Users/johnw/Desktop
 
-  fin:
+  athena:
     Rsync:
-      ReceiveFrom:
-        - vulcan
+      SendOnly: true
+      # ReceiveFrom:
+      #   - vulcan
       Path: /Users/johnw/Desktop
