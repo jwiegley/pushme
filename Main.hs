@@ -30,9 +30,7 @@ import           Data.Monoid ((<>), mempty)
 import           Data.Ord (comparing)
 import           Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
-import           Data.Yaml (decode)
-import           Filesystem
-import           Filesystem.Path.CurrentOS hiding (null, concat)
+import           Data.Yaml (decodeThrow)
 import           GHC.Conc (setNumCapabilities)
 import           Pipes as P
 import qualified Pipes.Group as P
@@ -40,10 +38,11 @@ import qualified Pipes.Prelude as P
 import           Pipes.Safe as P hiding (finally)
 import qualified Pipes.Text as Text
 import qualified Pipes.Text.IO as Text
-import           Prelude hiding (FilePath)
 import           Pushme.Options (Options(..), getOptions)
 import           Safe hiding (at)
 import           Shelly.Lifted hiding ((</>))
+import           System.Directory
+import           System.FilePath.Posix
 import           Text.Printf (printf)
 import           Text.Regex.Posix ((=~))
 
@@ -63,9 +62,6 @@ data Rsync = Rsync
 
 defaultRsync :: FilePath -> Rsync
 defaultRsync p = Rsync p Nothing [] False False False False Nothing
-
-instance FromJSON FilePath where
-    parseJSON = fmap fromText . parseJSON
 
 instance FromJSON Rsync where
     parseJSON (Object v) = Rsync
@@ -276,13 +272,13 @@ main = withStdoutLogging $ do
 
 readHostsFile :: Options -> IO (Map Text Host)
 readHostsFile opts = do
-    hostsFile <- expandPath (decodeString (configDir opts) </> "hosts")
-    exists <- isFile hostsFile
+    hostsFile <- expandPath ((configDir opts) </> "hosts")
+    exists <- doesFileExist hostsFile
     if exists
         then do
             hosts <- runSafeT $ P.toListM $
                 L.purely P.folds L.mconcat
-                    (Text.readFile (encodeString hostsFile) ^. Text.lines)
+                    (Text.readFile hostsFile ^. Text.lines)
                 >-> P.map (\l -> let (x:xs) = T.words l
                                      h = Host x xs
                                  in (x,h) : map (,h) xs)
@@ -299,23 +295,22 @@ directoryContents topPath = do
 
 readFilesets :: Options -> IO (Map Text Fileset)
 readFilesets opts = do
-    confD <- expandPath (decodeString (configDir opts) </> "conf.d")
-    exists <- isDirectory confD
+    confD <- expandPath (configDir opts </> "conf.d")
+    exists <- doesDirectoryExist confD
     unless exists $
         errorL $ "Please define filesets, "
             <> "using files named "
-            <> T.pack (encodeString (decodeString (configDir opts)
-                                        </> "conf.d" </> "<name>.yml"))
+            <> T.pack (configDir opts </> "conf.d" </> "<name>.yml")
 
     fmap (M.fromList . map ((^.fsName) &&& id))
         $ P.toListM
         $ directoryContents confD
-            >-> P.filter (\n -> extension n == Just "yml")
+            >-> P.filter (\n -> takeExtension n == ".yml")
             >-> P.mapM (liftIO . readDataFile)
 
 readDataFile :: FromJSON a => FilePath -> IO a
 readDataFile p = do
-    d  <- Data.Yaml.decode <$> B.readFile (encodeString p)
+    d  <- decodeThrow <$> B.readFile p
     case d of
         Nothing -> errorL $ "Failed to read file " <> toTextIgnore p
         Just d' -> return d'
@@ -396,7 +391,7 @@ snapshotBinding bnd@((^? that.zfsScheme) -> Just z) = do
     mrev <- determineLastRev (env bnd) z
     let nextRev = maybe 1 succ mrev
         thatSnapshot =
-            toTextIgnore $ z^.zfsPoolPath <> "@" <> decodeString (show nextRev)
+            toTextIgnore $ z^.zfsPoolPath <> "@" <> show nextRev
     liftIO $ log' $ "Creating snapshot " <> thatSnapshot
     execute_ (env bnd) "zfs" ["snapshot", thatSnapshot]
 snapshotBinding _ = return ()
@@ -747,8 +742,8 @@ execute ExeEnv {..} name args = do
     if dryRun opts || noSync opts
         then return ""
         else do
-            let (sshCmd:sshArgs) = words (encodeString name'')
-            n <- findCmd (decodeString sshCmd)
+            let (sshCmd:sshArgs) = words name''
+            n <- findCmd sshCmd
             liftIO $ debug' $ toTextIgnore n
                <> " "
                <> T.intercalate " "
@@ -758,7 +753,7 @@ execute ExeEnv {..} name args = do
     findCmd n
         -- Assume commands with spaces in them are "known"
         | " " `T.isInfixOf` toTextIgnore n = return n
-        | relative n = do
+        | isRelative n = do
             c <- which n
             case c of
                 Nothing -> errorL $ "Failed to find command: " <> toTextIgnore n
@@ -769,7 +764,7 @@ execute ExeEnv {..} name args = do
            -> (App a -> App a, FilePath, [Text])
     remote opts host (m, p, xs) =
         let sshCmd = ssh opts
-        in (m, if null sshCmd then "ssh" else decodeString sshCmd,
+        in (m, if null sshCmd then "ssh" else sshCmd,
             host^.hostName : toTextIgnore p : xs)
 
     sudoAsRoot :: FilePath -> [Text] -> (FilePath, [Text])
@@ -783,7 +778,7 @@ execute_ :: ExeEnv -> FilePath -> [Text] -> App ()
 execute_ env' fp args = void $ execute env' { exeDiscard = True } fp args
 
 expandPath :: FilePath -> IO FilePath
-expandPath (encodeString -> '~':'/':p) = (</> decodeString p) <$> getHomeDirectory
+expandPath ('~':'/':p) = (</> p) <$> getHomeDirectory
 expandPath p = return p
 
 asDirectory :: FilePath -> FilePath
