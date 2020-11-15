@@ -62,7 +62,7 @@ data Rsync = Rsync
     deriving (Show, Eq)
 
 defaultRsync :: FilePath -> Rsync
-defaultRsync p = Rsync p Nothing [] False False False False Nothing
+defaultRsync p = Rsync p Nothing [] False False False False False Nothing
 
 instance FromJSON Rsync where
     parseJSON (Object v) = Rsync
