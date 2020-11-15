@@ -49,14 +49,15 @@ import           Text.Regex.Posix ((=~))
 --import Debug.Trace
 
 data Rsync = Rsync
-    { _rsyncPath          :: FilePath
-    , _rsyncName          :: Maybe Text
-    , _rsyncFilters       :: [Text]
-    , _rsyncReportMissing :: Bool
-    , _rsyncNoLinks       :: Bool
-    , _rsyncSendOnly      :: Bool
-    , _rsyncReceiveOnly   :: Bool
-    , _rsyncReceiveFrom   :: Maybe [Text]
+    { _rsyncPath           :: FilePath
+    , _rsyncName           :: Maybe Text
+    , _rsyncFilters        :: [Text]
+    , _rsyncReportMissing  :: Bool
+    , _rsyncNoLinks        :: Bool
+    , _rsyncDeleteExcluded :: Bool
+    , _rsyncSendOnly       :: Bool
+    , _rsyncReceiveOnly    :: Bool
+    , _rsyncReceiveFrom    :: Maybe [Text]
     }
     deriving (Show, Eq)
 
@@ -67,12 +68,13 @@ instance FromJSON Rsync where
     parseJSON (Object v) = Rsync
         <$> v .:  "Path"
         <*> v .:? "Host"
-        <*> v .:? "Filters"       .!= []
-        <*> v .:? "ReportMissing" .!= False
-        <*> v .:? "NoLinks"       .!= False
-        <*> v .:? "SendOnly"      .!= False
-        <*> v .:? "ReceiveOnly"   .!= False
-        <*> v .:? "ReceiveFrom"   .!= Nothing
+        <*> v .:? "Filters"        .!= []
+        <*> v .:? "ReportMissing"  .!= False
+        <*> v .:? "NoLinks"        .!= False
+        <*> v .:? "DeleteExcluded" .!= False
+        <*> v .:? "SendOnly"       .!= False
+        <*> v .:? "ReceiveOnly"    .!= False
+        <*> v .:? "ReceiveFrom"    .!= Nothing
     parseJSON _ = errorL "Error parsing Rsync"
 
 makeLenses ''Rsync
@@ -178,6 +180,8 @@ instance FromJSON Fileset where
                 fs' & stores.traverse.rsyncScheme.rsyncReportMissing &&~ fromJSON' xs
             k fs' "NoLinks" xs =
                 fs' & stores.traverse.rsyncScheme.rsyncNoLinks &&~ fromJSON' xs
+            k fs' "DeleteExcluded" xs =
+                fs' & stores.traverse.rsyncScheme.rsyncDeleteExcluded &&~ fromJSON' xs
             k fs' "SendOnly" xs =
                 fs' & stores.traverse.rsyncScheme.rsyncSendOnly &&~ fromJSON' xs
             k fs' "ReceiveOnly" xs =
@@ -578,7 +582,8 @@ rsync bnd srcRsync src destRsync dest =
     else do
         let rfs   = (srcRsync^.rsyncFilters) <> (destRsync^.rsyncFilters)
             nol   = (srcRsync^.rsyncNoLinks) || (destRsync^.rsyncNoLinks)
-            go xs = doRsync (fs^.fsName) xs (toTextIgnore src) dest nol
+            dex   = (srcRsync^.rsyncDeleteExcluded) || (destRsync^.rsyncDeleteExcluded)
+            go xs = doRsync (fs^.fsName) xs (toTextIgnore src) dest nol dex
         case rfs of
             [] -> go []
 
@@ -624,8 +629,8 @@ reportMissingFiles fs r =
         . T.replace "?" "."
         . T.replace "." "\\."
 
-doRsync :: Text -> [Text] -> Text -> Text -> Bool -> App ()
-doRsync label options src dest noLinks = do
+doRsync :: Text -> [Text] -> Text -> Text -> Bool -> Bool -> App ()
+doRsync label options src dest noLinks deleteExcluded = do
     opts <- ask
     let den      = (\x -> if x then 1000 else 1024) $ siUnits opts
         sshCmd   = ssh opts
@@ -660,6 +665,7 @@ doRsync label options src dest noLinks = do
                 else [])
             <> ["-n" | dryRun opts]
             <> ["--no-links" | noLinks]
+            <> ["--delete-excluded" | deleteExcluded]
             <> ["--checksum" | checksum opts]
             <> (if verbose opts then ["-P"] else ["--stats"])
             <> [pack ("--rsync-path=sudo " ++ if not (null rsyncCmd)
