@@ -1,5 +1,5 @@
 name:       pushme
-version:    2.1.3
+version:    2.1.4
 synopsis:   Tool to synchronize directories with rsync, zfs or git-annex
 github:     jwiegley/pushme
 author:     John Wiegley
