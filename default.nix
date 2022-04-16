@@ -1,14 +1,14 @@
-{ compiler    ? "ghc884"
+{ compiler    ? "ghc8107"
 , doBenchmark ? false
 , doTracing   ? false
 , doStrict    ? false
-, rev         ? "502845c3e31ef3de0e424f3fcb09217df2ce6df6"
-, sha256      ? "0fcqpsy6y7dgn0y0wgpa56gsg0b0p8avlpjrd79fp4mp9bl18nda"
+, rev         ? "faad370edcb37162401be50d45526f52bb16a713"
+, sha256      ? "1d82d4vh0layf6n925j0h2nym16jbvcvps3l5m8ln9hxn0m6gadn"
 , pkgs        ? import (builtins.fetchTarball {
     url = "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz";
     inherit sha256; }) {
     config.allowUnfree = true;
-    config.allowBroken = false;
+    config.allowBroken = true;
   }
 , returnShellEnv ? pkgs.lib.inNixShell
 , mkDerivation ? null
@@ -28,7 +28,8 @@ in haskellPackages.developPackage {
   source-overrides = {
   };
 
-  modifier = drv: pkgs.haskell.lib.overrideCabal drv (attrs: {
+  modifier = drv: pkgs.haskell.lib.overrideCabal
+   (pkgs.haskell.lib.justStaticExecutables drv) (attrs: {
     inherit doBenchmark;
     buildTools = (attrs.buildTools or []) ++ [
       haskellPackages.cabal-install
