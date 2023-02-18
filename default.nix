@@ -36,8 +36,6 @@ in haskellPackages.developPackage {
       haskellPackages.hpack
       haskellPackages.hoogle
       haskellPackages.hasktags
-      haskellPackages.ghcid
-      haskellPackages.ormolu
     ];
   });
 

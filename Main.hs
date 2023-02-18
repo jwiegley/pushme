@@ -10,42 +10,40 @@
 
 module Main where
 
-import Control.Applicative
-import Control.Arrow
-import Control.Concurrent.ParallelIO (parallel_, stopGlobalPool)
-import Control.Exception
+import           Control.Applicative
+import           Control.Arrow
+import           Control.Concurrent.ParallelIO (parallel_, stopGlobalPool)
+import           Control.Exception
 import qualified Control.Foldl as L
-import Control.Lens
-import Control.Logging
-import Control.Monad
-import Control.Monad.Trans.Reader
-import Data.Aeson hiding (Options)
+import           Control.Lens
+import           Control.Logging
+import           Control.Monad
+import           Control.Monad.Trans.Reader
+import           Data.Aeson hiding (Options)
 import qualified Data.ByteString as B (readFile)
-import Data.Char (isDigit)
-import Data.List
-import Data.Map (Map)
+import           Data.Char (isDigit)
+import           Data.List
+import           Data.Map (Map)
 import qualified Data.Map as M
-import Data.Maybe (catMaybes, fromJust, fromMaybe, isNothing)
-import Data.Ord (comparing)
-import Data.Text (Text, pack, unpack)
+import           Data.Maybe (catMaybes, fromJust, fromMaybe, isNothing)
+import           Data.Ord (comparing)
+import           Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
-import Data.Yaml (decodeThrow)
-import GHC.Conc (setNumCapabilities)
-import Pipes as P
+import           Data.Yaml (decodeThrow)
+import           GHC.Conc (setNumCapabilities)
+import           Pipes as P
 import qualified Pipes.Group as P
 import qualified Pipes.Prelude as P
-import Pipes.Safe as P hiding (finally)
+import           Pipes.Safe as P hiding (finally)
 import qualified Pipes.Text as Text
 import qualified Pipes.Text.IO as Text
-import Pushme.Options (Options (..), getOptions)
-import Safe hiding (at)
-import Shelly.Lifted hiding ((</>))
-import System.Directory
-import System.FilePath.Posix
-import Text.Printf (printf)
-import Text.Regex.Posix ((=~))
-
---import Debug.Trace
+import           Pushme.Options (Options (..), getOptions)
+import           Safe hiding (at)
+import           Shelly.Lifted hiding ((</>))
+import           System.Directory
+import           System.FilePath.Posix
+import           Text.Printf (printf)
+import           Text.Regex.Posix ((=~))
 
 data Rsync = Rsync
   { _rsyncPath :: FilePath,
@@ -56,12 +54,15 @@ data Rsync = Rsync
     _rsyncDeleteExcluded :: Maybe Bool,
     _rsyncSendOnly :: Maybe Bool,
     _rsyncReceiveOnly :: Maybe Bool,
-    _rsyncReceiveFrom :: Maybe [Text]
+    _rsyncReceiveFrom :: Maybe [Text],
+    _rsyncNoEscalation :: Maybe Bool
   }
   deriving (Show, Eq)
 
 defaultRsync :: FilePath -> Rsync
-defaultRsync p = Rsync p Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+defaultRsync p =
+  Rsync p Nothing Nothing Nothing Nothing Nothing
+        Nothing Nothing Nothing Nothing
 
 instance FromJSON Rsync where
   parseJSON (Object v) =
@@ -75,6 +76,7 @@ instance FromJSON Rsync where
       <*> v .:? "SendOnly"
       <*> v .:? "ReceiveOnly"
       <*> v .:? "ReceiveFrom"
+      <*> v .:? "NoEscalation"
   parseJSON _ = errorL "Error parsing Rsync"
 
 makeLenses ''Rsync
@@ -200,6 +202,9 @@ instance FromJSON Fileset where
               %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k "ReceiveFrom" xs fs' =
             fs' & stores . traverse . rsyncScheme . rsyncReceiveFrom
+              %~ \case Nothing -> Just (fromJSON' xs); x -> x
+          k "NoEscalation" xs fs' =
+            fs' & stores . traverse . rsyncScheme . rsyncNoEscalation
               %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k _ _ fs' = fs'
       f "Zfs" _ fs = fs
@@ -661,7 +666,14 @@ rsync bnd srcRsync src destRsync dest =
               ( srcRsync ^. rsyncDeleteExcluded
                   <|> destRsync ^. rsyncDeleteExcluded
               )
-          go xs = doRsync (fs ^. fsName) xs (toTextIgnore src) dest nol dex
+          noEscalate =
+            fromMaybe
+              False
+              ( srcRsync ^. rsyncNoEscalation
+                  <|> destRsync ^. rsyncNoEscalation
+              )
+          go xs = doRsync (fs ^. fsName) xs (toTextIgnore src)
+                          dest nol dex noEscalate
       case rfs of
         [] -> go []
         filters -> do
@@ -671,7 +683,12 @@ rsync bnd srcRsync src destRsync dest =
           withTmpDir $ \p -> do
             let fpath = p </> "filters"
             writefile fpath (T.unlines filters)
-            go ["--include-from=" <> toTextIgnore fpath]
+
+            ignoreFile <- liftIO $ expandPath "~/.config/ignore.lst"
+            exists <- liftIO $ doesFileExist ignoreFile
+            go $ ["--include-from=" <> toTextIgnore fpath] ++
+                 ["--include-from=" <> toTextIgnore ignoreFile | exists]
+
   where
     fs = bnd ^. fileset
 
@@ -712,8 +729,8 @@ reportMissingFiles fs r =
         . T.replace "?" "."
         . T.replace "." "\\."
 
-doRsync :: Text -> [Text] -> Text -> Text -> Bool -> Bool -> App ()
-doRsync label options src dest noLinks deleteExcluded = do
+doRsync :: Text -> [Text] -> Text -> Text -> Bool -> Bool -> Bool -> App ()
+doRsync label options src dest noLinks deleteExcluded noEscalate = do
   opts <- ask
   let den = (\x -> if x then 1000 else 1024) $ siUnits opts
       sshCmd = ssh opts
@@ -756,7 +773,7 @@ doRsync label options src dest noLinks deleteExcluded = do
                        then rsyncCmd
                        else "rsync"
                  )
-               | toRemote
+               | toRemote && not noEscalate
              ]
           <> options
           <> [ src,
@@ -767,7 +784,11 @@ doRsync label options src dest noLinks deleteExcluded = do
       analyze = not (verbose opts) && not (noSync opts)
       env' =
         defaultExeEnv
-          { exeMode = if toRemote then SudoAsRoot else Sudo,
+          { exeMode = if noEscalate
+                      then Normal
+                      else if toRemote
+                           then SudoAsRoot
+                           else Sudo,
             exeDiscard = not analyze
           }
 

@@ -39,7 +39,7 @@ executable pushme
     , filepath
     , foldl
     , io-storage ==0.3.*
-    , lens >=4.9 && <5.1
+    , lens >=4.9
     , logging ==3.0.*
     , monad-logger ==0.3.*
     , old-locale ==1.0.*
