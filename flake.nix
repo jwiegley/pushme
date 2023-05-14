@@ -24,7 +24,7 @@
               compiler-nix-name = "ghc927";
               shell.tools = {
                 cabal = {};
-                haskell-language-server = {};
+                # haskell-language-server = {};
                 hlint = {};
               };
               shell.buildInputs = with pkgs; [

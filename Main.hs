@@ -787,8 +787,8 @@ doRsync label options src dest noLinks deleteExcluded escalate = do
           { exeMode = if escalate
                       then if toRemote
                            then SudoAsRoot
-                           else Sudo,
-                      else Normal
+                           else Sudo
+                      else Normal,
             exeDiscard = not analyze
           }
 
