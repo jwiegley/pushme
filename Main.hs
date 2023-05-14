@@ -55,7 +55,7 @@ data Rsync = Rsync
     _rsyncSendOnly :: Maybe Bool,
     _rsyncReceiveOnly :: Maybe Bool,
     _rsyncReceiveFrom :: Maybe [Text],
-    _rsyncNoEscalation :: Maybe Bool
+    _rsyncEscalateToRoot :: Maybe Bool
   }
   deriving (Show, Eq)
 
@@ -76,7 +76,7 @@ instance FromJSON Rsync where
       <*> v .:? "SendOnly"
       <*> v .:? "ReceiveOnly"
       <*> v .:? "ReceiveFrom"
-      <*> v .:? "NoEscalation"
+      <*> v .:? "EscalateToRoot"
   parseJSON _ = errorL "Error parsing Rsync"
 
 makeLenses ''Rsync
@@ -203,8 +203,8 @@ instance FromJSON Fileset where
           k "ReceiveFrom" xs fs' =
             fs' & stores . traverse . rsyncScheme . rsyncReceiveFrom
               %~ \case Nothing -> Just (fromJSON' xs); x -> x
-          k "NoEscalation" xs fs' =
-            fs' & stores . traverse . rsyncScheme . rsyncNoEscalation
+          k "EscalateToRoot" xs fs' =
+            fs' & stores . traverse . rsyncScheme . rsyncEscalateToRoot
               %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k _ _ fs' = fs'
       f "Zfs" _ fs = fs
@@ -666,14 +666,14 @@ rsync bnd srcRsync src destRsync dest =
               ( srcRsync ^. rsyncDeleteExcluded
                   <|> destRsync ^. rsyncDeleteExcluded
               )
-          noEscalate =
+          escalate =
             fromMaybe
               False
-              ( srcRsync ^. rsyncNoEscalation
-                  <|> destRsync ^. rsyncNoEscalation
+              ( srcRsync ^. rsyncEscalateToRoot
+                  <|> destRsync ^. rsyncEscalateToRoot
               )
           go xs = doRsync (fs ^. fsName) xs (toTextIgnore src)
-                          dest nol dex noEscalate
+                          dest nol dex escalate
       case rfs of
         [] -> go []
         filters -> do
@@ -730,7 +730,7 @@ reportMissingFiles fs r =
         . T.replace "." "\\."
 
 doRsync :: Text -> [Text] -> Text -> Text -> Bool -> Bool -> Bool -> App ()
-doRsync label options src dest noLinks deleteExcluded noEscalate = do
+doRsync label options src dest noLinks deleteExcluded escalate = do
   opts <- ask
   let den = (\x -> if x then 1000 else 1024) $ siUnits opts
       sshCmd = ssh opts
@@ -773,7 +773,7 @@ doRsync label options src dest noLinks deleteExcluded noEscalate = do
                        then rsyncCmd
                        else "rsync"
                  )
-               | toRemote && not noEscalate
+               | toRemote && escalate
              ]
           <> options
           <> [ src,
@@ -784,11 +784,11 @@ doRsync label options src dest noLinks deleteExcluded noEscalate = do
       analyze = not (verbose opts) && not (noSync opts)
       env' =
         defaultExeEnv
-          { exeMode = if noEscalate
-                      then Normal
-                      else if toRemote
+          { exeMode = if escalate
+                      then if toRemote
                            then SudoAsRoot
                            else Sudo,
+                      else Normal
             exeDiscard = not analyze
           }
 

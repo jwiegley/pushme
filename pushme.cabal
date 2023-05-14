@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.6.
+-- This file has been generated from package.yaml by hpack version 0.35.2.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 043c61d79ffd1821c5b9f34cc94dcdd3e3958c8e01fb29ceec4ff53d9f5b25e9
+-- hash: 65e0f32f714b6f63dcd423cd6fda786053f3397aa6e0cfe0adaecda92a19e3f6
 
 name:           pushme
 version:        2.1.4
@@ -32,33 +32,33 @@ executable pushme
   ghc-options: -threaded
   build-depends:
       aeson
-    , base >=4.7 && <5.0
-    , bytestring ==0.10.*
-    , containers ==0.6.*
+    , base >=4.7
+    , bytestring >=0.10
+    , containers >=0.6
     , directory
     , filepath
     , foldl
-    , io-storage ==0.3.*
+    , io-storage >=0.3
     , lens >=4.9
-    , logging ==3.0.*
-    , monad-logger ==0.3.*
-    , old-locale ==1.0.*
-    , optparse-applicative >=0.10 && <1.0
-    , parallel-io ==0.3.*
+    , logging >=3.0
+    , monad-logger >=0.3
+    , old-locale >=1.0
+    , optparse-applicative >=0.10
+    , parallel-io >=0.3
     , pipes
     , pipes-group
     , pipes-safe
     , pipes-text
-    , regex-posix >=0.95 && <1.0
-    , safe ==0.3.*
-    , shelly >=1.6 && <2.0
-    , system-fileio ==0.3.*
-    , system-filepath ==0.4.*
-    , temporary >=1.2 && <2.0
-    , text ==1.2.*
-    , time >=1.4 && <2.0
-    , transformers >=0.3 && <0.6
-    , unix >=2.6 && <2.8
-    , unordered-containers ==0.2.*
+    , regex-posix >=0.95
+    , safe >=0.3
+    , shelly >=1.6
+    , system-fileio >=0.3
+    , system-filepath >=0.4
+    , temporary >=1.2
+    , text >=1.2
+    , time >=1.4
+    , transformers >=0.3
+    , unix >=2.6
+    , unordered-containers >=0.2
     , yaml
   default-language: Haskell2010

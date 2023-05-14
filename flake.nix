@@ -2,7 +2,7 @@
   description = "Multiple fileset synchronizer";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?rev=bb2009ca185d97813e75736c2b8d1d8bb81bde05";
+    nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     haskellNix.url = "github:input-output-hk/haskell.nix";
     flake-utils.url = "github:numtide/flake-utils";
   };
@@ -25,7 +25,7 @@
               shell.tools = {
                 cabal = {};
                 haskell-language-server = {};
-                # hlint = {};
+                hlint = {};
               };
               shell.buildInputs = with pkgs; [
                 pkgconfig
