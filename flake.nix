@@ -21,11 +21,11 @@
           pushme =
             final.haskell-nix.project' {
               src = ./.;
-              compiler-nix-name = "ghc927";
+              compiler-nix-name = "ghc961";
               shell.tools = {
                 cabal = {};
                 # haskell-language-server = {};
-                hlint = {};
+                # hlint = {};
               };
               shell.buildInputs = with pkgs; [
                 pkgconfig
