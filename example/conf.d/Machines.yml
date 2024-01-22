@@ -5,15 +5,31 @@ Class:    'large,data'
 Stores:
   vulcan:
     Rsync:
-      SendOnly: true
       Path: /Users/johnw/Machines
-      Filters:
-        - '+ /Windows 7 Ultimate x64.vmwarevm/'
-        - '+ /Apple II.sparsebundle/'
-        - '- /*'
-        - '- /*/'
-        - '- /.*'
-        - '- /.*/'
+      SendOnly: true
 
   tank:
-    Path: /Volumes/tank/Machines
+    Rsync:
+      Path: /Volumes/tank/Machines
+      ReceiveOnly: true
+      ReceiveFrom:
+        - vulcan
+      # Keep all archives in /Volumes/tank/Machines
+      Filters:
+        - '- *.dmg'
+        - '- *.img'
+        - '- *.iso'
+        - '- *.sig'
+        - '- *.tar'
+        - '- *.vii'
+        - '- *.xz'
+        - '- /vagrant/'
+
+  hermes:
+    Rsync:
+      Path: /Users/johnw/Machines
+      SendOnly: true
+
+Options:
+  Rsync:
+    NoEscalation: true

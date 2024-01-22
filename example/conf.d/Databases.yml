@@ -5,30 +5,22 @@ Class:    'quick,main,sync'
 Stores:
   vulcan:
     Rsync:
-      ReceiveFrom:
-        - hermes
-        - athena
       Path: /Users/johnw/Databases
-
-  tank:
-    Path: /Volumes/tank/Databases
-  
-  vault:
-    Rsync:
       ReceiveFrom:
-        - vulcan
         - hermes
-        - athena
-      Path: /Volumes/vault/Databases
 
   hermes:
     Rsync:
+      Path: /Users/johnw/Databases
       ReceiveFrom:
         - vulcan
-      Path: /Users/johnw/Databases
 
-  athena:
+  tank:
     Rsync:
-      ReceiveFrom:
-        - vulcan
-      Path: /Users/johnw/Databases
+      Path: /Volumes/tank/Databases
+      DeleteExcluded: true
+      ReceiveOnly: true
+  
+Options:
+  Rsync:
+    NoEscalation: true

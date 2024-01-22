@@ -5,33 +5,19 @@ Class:    'quick,main,sync'
 Stores:
   vulcan:
     Rsync:
-      SendOnly: true
-      # ReceiveFrom:
-      #   - hermes
-      #   - athena
       Path: /Users/johnw/Desktop
+      SendOnly: true
 
   tank:
-    Path: /Volumes/tank/Desktop
-  
-  vault:
     Rsync:
-      ReceiveFrom:
-        - vulcan
-        - hermes
-        - athena
-      Path: /Volumes/vault/Desktop
-
+      Path: /Volumes/tank/Desktop
+      ReceiveOnly: true
+  
   hermes:
     Rsync:
-      SendOnly: true
-      # ReceiveFrom:
-      #   - vulcan
       Path: /Users/johnw/Desktop
-
-  athena:
-    Rsync:
       SendOnly: true
-      # ReceiveFrom:
-      #   - vulcan
-      Path: /Users/johnw/Desktop
+  
+Options:
+  Rsync:
+    NoEscalation: true

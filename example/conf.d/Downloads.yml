@@ -5,37 +5,27 @@ Class:    'large,data,sync'
 Stores:
   vulcan:
     Rsync:
-      ReceiveFrom:
-        - hermes
-        - athena
       Path: /Users/johnw/Downloads
-  
-  tank:
-    Path: /Volumes/tank/Downloads
-
-  vault:
-    Rsync:
       ReceiveFrom:
-        - vulcan
         - hermes
-        - athena
-      Path: /Volumes/vault/Downloads
+  
+  # tank:
+  #   Rsync:
+  #     Path: /Volumes/tank/Downloads
+  #     DeleteExcluded: true
+  #     ReceiveOnly: true
 
   hermes:
     Rsync:
+      Path: /Users/johnw/Downloads
       ReceiveFrom:
         - vulcan
-      Path: /Users/johnw/Downloads
-
-  athena:
-    Rsync:
-      ReceiveFrom:
-        - vulcan
-      Path: /Users/johnw/Downloads
 
 Options:
   Rsync:
+    NoEscalation: true
     Filters:
+      - '- *.aria2/'
       - '- *.download'
       - '- *.download/'
       - '- *.dvdmedia/'
@@ -45,5 +35,6 @@ Options:
       - '- *.partial/'
       - '- *.ripit/'
       - '- Hermes*.dmg'
+      - '- Mohajer*.dmg'
       - '- Nasim*.dmg'
       - '- Vulcan*.dmg'

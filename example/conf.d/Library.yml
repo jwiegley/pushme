@@ -5,78 +5,94 @@ Class:    'quick,main,sync'
 Stores:
   vulcan:
     Rsync:
+      Path: /Users/johnw/Library
       ReceiveFrom:
         - hermes
-        - athena
-      Path: /Users/johnw/Library
   
   tank:
     Rsync:
       Path: /Volumes/tank/Library
+      DeleteExcluded: true
+      ReceiveOnly: true
       Filters:
-        - '+ /Mobile Documents/'
-
-  vault:
-    Rsync:
-      ReceiveFrom:
-        - vulcan
-        - hermes
-        - athena
-      Path: /Volumes/vault/Library
-      Filters:
-        - '+ /Mobile Documents/'
+        - '- /Application Support/Battle.net/'
+        - '- /Application Support/Bookmap/Cache/'
+        - '- /Application Support/BraveSoftware/'
+        - '- /Application Support/Caches/'
+        - '- /Application Support/DEVONsphere Express/'
+        - '- /Application Support/DEVONthink 3/Abbyy/'
+        - '- /Application Support/Daedalus Mainnet/'
+        - '- /Application Support/Element/'
+        - '- /Application Support/FileProvider/'
+        - '- /Application Support/Knowledge/'
+        - '- /Application Support/Mail/'
+        - '- /Application Support/MobileSync/'
+        - '- /Application Support/Notion/'
+        - '- /Application Support/PhoneView/'
+        - '- /Application Support/Signal/'
+        - '- /Application Support/Steam/'
+        - '- /Application Support/TorBrowser-Data/'
+        - '- /Application Support/Zulip/Partitions/'
+        - '- /Application Support/discord/'
+        - '- /Application Support/zoom.us/'
+        - '- /Assistant/'
+        - '- /Caches/'
+        - '- /CloudStorage/GoogleDrive-copper2gold1@gmail.com/'
+        - '- /Containers/'
+        - '- /Developer/'
+        - '- /Group Containers/'
+        - '- /Mail/'
+        - '- /Metadata/'
+        - '- /Saved Application State/'
+        - '- /Thunderbird/'
+        - '- /Trial/'
 
   hermes:
     Rsync:
+      Path: /Users/johnw/Library
       ReceiveFrom:
         - vulcan
-      Path: /Users/johnw/Library
-
-  athena:
-    Rsync:
-      ReceiveFrom:
-        - vulcan
-      Path: /Users/johnw/Library
 
 Options:
   Rsync:
+    NoEscalation: true
     Filters:
       - '+ /Application Support/'
-      - '+ /Application Support/borderlands 2/'
-      - '+ /Application Support/Borderlands The Pre-Sequel/'
+      - '+ /Application Support/Anki2/'
+      - '+ /Application Support/Blizzard/'
       - '+ /Application Support/Boxer/'
-      - '+ /Application Support/DEVONagent/'
-      - '+ /Application Support/DEVONthink Pro 2/'
-      - '+ /Application Support/Feral Interactive/'
-      - '+ /Application Support/gzdoom/'
+      - '+ /Application Support/DEVONthink 3/'
+      - '+ /Application Support/DEVONthink 3/Inbox*/'
+      - '- /Application Support/DEVONthink 3/*'
+      - '- /Application Support/DEVONthink 3/*/'
+      - '- /Application Support/DEVONthink 3/.*'
+      - '- /Application Support/DEVONthink 3/.*/'
+      - '+ /Application Support/Firefox/'
       - '+ /Application Support/HandBrake/'
-      - '+ /Application Support/iDefrag/'
       - '+ /Application Support/LaunchBar/'
-      - '+ /Application Support/Path Finder/'
+      - '+ /Application Support/Lectrote/'
       - '+ /Application Support/Soulver/'
+      - '+ /Application Support/Terraria/'
       - '+ /Application Support/Virtual ][/'
+      - '+ /Application Support/Zotero/'
+      - '+ /Application Support/gzdoom/'
       - '- /Application Support/*'
       - '- /Application Support/*/'
       - '- /Application Support/.*'
       - '- /Application Support/.*/'
       - '+ /FontCollections/'
       - '+ /Fonts/'
+      - '+ /Keyboard Layouts/'
       - '+ /Preferences/'
       - '+ /Preferences/at.obdev.LaunchBar.plist'
-      - '+ /Preferences/com.almworks.jiraclient.plist'
-      - '+ /Preferences/com.chungwasoft.Shimo.plist'
-      - '+ /Preferences/com.cocoatech.PathFinder.plist'
-      - '+ /Preferences/com.devon-technologies.thinkpro2.plist'
-      - '+ /Preferences/com.googlecode.iterm2.plist'
       - '+ /Preferences/com.gog.*'
+      - '+ /Preferences/com.googlecode.iterm2.plist'
       - '+ /Preferences/gzdoom.ini'
       - '+ /Preferences/org.m0k.transmission.plist'
       - '- /Preferences/*'
       - '- /Preferences/*/'
       - '- /Preferences/.*'
       - '- /Preferences/.*/'
-      - '+ /QuickLook/'
-      - '+ /Workflows/'
       - '- /*'
       - '- /*/'
       - '- /.*'

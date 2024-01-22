@@ -5,33 +5,19 @@ Class:    'quick,main,sync'
 Stores:
   vulcan:
     Rsync:
-      SendOnly: true
-      # ReceiveFrom:
-      #   - hermes
-      #   - athena
       Path: /Users/johnw/Documents
+      SendOnly: true
 
   tank:
-    Path: /Volumes/tank/Documents
-  
-  vault:
     Rsync:
-      ReceiveFrom:
-        - vulcan
-        - hermes
-        - athena
-      Path: /Volumes/vault/Documents
-
+      Path: /Volumes/tank/Documents
+      ReceiveOnly: true
+  
   hermes:
     Rsync:
-      SendOnly: true
-      # ReceiveFrom:
-      #   - vulcan
       Path: /Users/johnw/Documents
-
-  athena:
-    Rsync:
       SendOnly: true
-      # ReceiveFrom:
-      #   - vulcan
-      Path: /Users/johnw/Documents
+  
+Options:
+  Rsync:
+    NoEscalation: true

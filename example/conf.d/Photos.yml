@@ -1,21 +1,16 @@
-Name:     'Pictures'
+Name:     'Photos'
 Priority: 130
 Class:    'large,data,annex'
 
 Stores:
   vulcan:
     Rsync:
-      Path: /Users/johnw/Pictures
-      SendOnly: true
-
-  hermes:
-    Rsync:
-      Path: /Users/johnw/Pictures
+      Path: /Volumes/ext/Photos
       SendOnly: true
 
   tank:
     Rsync:
-      Path: /Volumes/tank/Pictures
+      Path: /Volumes/tank/Photos
       ReceiveOnly: true
 
 Options:

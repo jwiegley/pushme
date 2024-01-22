@@ -5,35 +5,22 @@ Class:    'quick,main,sync'
 Stores:
   vulcan:
     Rsync:
+      Path: /Users/johnw/Messages
       ReceiveFrom:
         - hermes
-        - athena
-      Path: /Users/johnw/Messages
   
   tank:
-    Path: /Volumes/tank/Messages
-
-  vault:
     Rsync:
-      ReceiveFrom:
-        - vulcan
-        - hermes
-        - athena
-      Path: /Volumes/vault/Messages
+      Path: /Volumes/tank/Messages
+      DeleteExcluded: true
+      ReceiveOnly: true
 
   hermes:
     Rsync:
+      Path: /Users/johnw/Messages
       ReceiveFrom:
         - vulcan
-      Path: /Users/johnw/Messages
-
-  athena:
-    Rsync:
-      ReceiveFrom:
-        - vulcan
-      Path: /Users/johnw/Messages
-
+  
 Options:
   Rsync:
-    Filters:
-      - '- /Mailboxes/lucene-indexes/'
+    NoEscalation: true

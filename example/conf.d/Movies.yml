@@ -1,21 +1,21 @@
-Name:     'Music'
-Priority: 140
+Name:     'Movies'
+Priority: 12
 Class:    'quick,main,sync'
 
 Stores:
   vulcan:
     Rsync:
-      Path: /Users/johnw/Music
+      Path: /Users/johnw/Movies
       SendOnly: true
 
   hermes:
     Rsync:
-      Path: /Users/johnw/Music
+      Path: /Users/johnw/Movies
       SendOnly: true
 
   tank:
     Rsync:
-      Path: /Volumes/tank/Music
+      Path: /Volumes/tank/Movies
       ReceiveOnly: true
 
 Options:

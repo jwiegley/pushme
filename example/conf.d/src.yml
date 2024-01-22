@@ -5,56 +5,52 @@ Class:    'quick,main,sync'
 Stores:
   vulcan:
     Rsync:
-      ReceiveFrom:
-        - hermes
-        - athena
       Path: /Users/johnw/src
-
-  tank:
-    Path: /Volumes/tank/src
-  
-  vault:
-    Rsync:
       ReceiveFrom:
-        - vulcan
         - hermes
-        - athena
-      Path: /Volumes/vault/src
 
   hermes:
     Rsync:
+      Path: /Users/johnw/src
       ReceiveFrom:
         - vulcan
-      Path: /Users/johnw/src
 
   athena:
     Rsync:
+      Path: /Users/johnw/src
+      ReceiveOnly: true
       ReceiveFrom:
         - vulcan
-      Path: /Users/johnw/src
+        - hermes
+
+  tank:
+    Rsync:
+      Path: /Volumes/tank/src
+      DeleteExcluded: true
+      ReceiveOnly: true
 
 Options:
   Rsync:
+    NoEscalation: true
     Filters:
-      - '- *.d'
-      - '- *.db'
+      - '- *.agdai'
+      - '- *.db?'
       - '- *.glob'
       - '- *.hi'
       - '- *.o'
-      - '- *.vo'
+      - '- *.vi?o[ks]?'
+      - '- *~'
+      - '- .*.aux'
       - '- .cabal*'
       - '- .cargo-home/'
-      - '- .direnv/'
+      - '- .envrc'
+      - '- .envrc.cache'
       - '- .ghc.*'
-      - '- .hsenvs/'
-      - '- /kadena/balCheck.yaml'
-      - '- /kadena/balance.csv'
-      - '- /kadena/balance.log'
-      - '- /kadena/pact.tix'
-      - '- TAGS'
-      - '- cabal-dev/'
-      - '- cabal.project*'
+      - '- .vagrant/'
+      - '- MAlonzo/'
+      - '- cabal.project.local*'
       - '- dist-newstyle/'
       - '- dist/'
-      - '- result*'
+      - '- result'
+      - '- result-*'
       - '- target/'
