@@ -39,7 +39,7 @@ import qualified Pipes.Text as Text
 import qualified Pipes.Text.IO as Text
 import           Pushme.Options (Options (..), getOptions)
 import           Safe hiding (at)
-import           Shelly.Lifted hiding ((</>))
+import           Shelly.Lifted hiding ((</>), FilePath)
 import           System.Directory
 import           System.FilePath.Posix
 import           Text.Printf (printf)
