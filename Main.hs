@@ -25,18 +25,13 @@ import           Data.Char (isDigit)
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as M
-import           Data.Maybe (catMaybes, fromJust, fromMaybe, isNothing)
+import Data.Maybe
+    ( catMaybes, fromJust, fromMaybe, isNothing, mapMaybe )
 import           Data.Ord (comparing)
 import           Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import           Data.Yaml (decodeThrow)
 import           GHC.Conc (setNumCapabilities)
-import           Pipes as P
-import qualified Pipes.Group as P
-import qualified Pipes.Prelude as P
-import           Pipes.Safe as P hiding (finally)
-import qualified Pipes.Text as Text
-import qualified Pipes.Text.IO as Text
 import           Pushme.Options (Options (..), getOptions)
 import           Safe hiding (at)
 import           Shelly.Lifted hiding ((</>), FilePath)
@@ -107,8 +102,8 @@ data Annex = Annex
 instance FromJSON Annex where
   parseJSON (Object v) = do
     p <- v .: "Path"
-    Annex <$> pure p
-      <*> v .:? "Name"
+    Annex p
+      <$> v .:? "Name"
       <*> v .:? "Flags"
       <*> v .:? "Primary"
   parseJSON _ = errorL "Error parsing Annex"
@@ -296,32 +291,28 @@ main = withStdoutLogging $ do
 
 readHostsFile :: Options -> IO (Map Text Host)
 readHostsFile opts = do
-  hostsFile <- expandPath ((configDir opts) </> "hosts")
-  exists <- doesFileExist hostsFile
+  filePath <- expandPath (configDir opts </> "hosts")
+  exists <- doesFileExist filePath
   if exists
     then do
-      hosts <-
-        runSafeT $
-          P.toListM $
-            L.purely
-              P.folds
-              L.mconcat
-              (Text.readFile hostsFile ^. Text.lines)
-              >-> P.map
-                ( \l ->
-                    let (x : xs) = T.words l
-                        h = Host x xs
-                     in (x, h) : map (,h) xs
-                )
-      return $ M.fromList (concat hosts)
+      contents <- readFile filePath
+      let linesOfWords = map words (lines contents)
+          wordMappings = mapMaybe lineToMapping linesOfWords
+      return $ M.fromList (concat wordMappings)
     else return mempty
+  where
+   lineToMapping :: [String] -> Maybe [(Text, Host)]
+   lineToMapping [] = Nothing
+   lineToMapping (map T.pack -> (x:xs)) =
+     let h = Host x xs
+     in Just $ (x, h) : map (,h) xs
 
-directoryContents :: FilePath -> Producer FilePath IO ()
+directoryContents :: FilePath -> IO [FilePath]
 directoryContents topPath = do
-  names <- lift $ listDirectory topPath
+  names <- listDirectory topPath
   let properNames =
         filter (`notElem` [".", "..", ".DS_Store", ".localized"]) names
-  forM_ properNames $ \name -> yield (topPath </> name)
+  pure $ map (topPath </>) properNames
 
 readFilesets :: Options -> IO (Map Text Fileset)
 readFilesets opts = do
@@ -333,11 +324,10 @@ readFilesets opts = do
         <> "using files named "
         <> T.pack (configDir opts </> "conf.d" </> "<name>.yml")
 
-  fmap (M.fromList . map ((^. fsName) &&& id)) $
-    P.toListM $
-      directoryContents confD
-        >-> P.filter (\n -> takeExtension n == ".yml")
-        >-> P.mapM (liftIO . readDataFile)
+  fmap (M.fromList . map ((^. fsName) &&& id)) $ do
+    contents <- directoryContents confD
+    forM (filter (\n -> takeExtension n == ".yml") contents) $
+        liftIO . readDataFile
 
 readDataFile :: FromJSON a => FilePath -> IO a
 readDataFile p = do
@@ -395,11 +385,8 @@ relevantBindings opts thisHost hosts fsets =
                in const (b, e)
             | otherwise = id
           (here, there) = f (hereRaw, thereRaw)
-      Binding
-        <$> pure fs
-        <*> pure (getHost here)
-        <*> pure (getHost there)
-        <*> fs ^. stores . at here
+      Binding fs (getHost here) (getHost there)
+        <$> fs ^. stores . at here
         <*> fs ^. stores . at there
         <*> pure
           ( if atsign
@@ -686,23 +673,19 @@ rsync bnd srcRsync src destRsync dest =
 
             ignoreFile <- liftIO $ expandPath "~/.config/ignore.lst"
             exists <- liftIO $ doesFileExist ignoreFile
-            go $ ["--include-from=" <> toTextIgnore fpath] ++
+            go $ "--include-from=" <> toTextIgnore fpath :
                  ["--include-from=" <> toTextIgnore ignoreFile | exists]
 
   where
     fs = bnd ^. fileset
 
 reportMissingFiles :: Fileset -> Rsync -> IO ()
-reportMissingFiles fs r =
-  runEffect $
-    for
-      ( directoryContents rpath
-          >-> P.map (T.drop len . toTextIgnore)
-          >-> P.catch
-            (P.filter (\x -> not (any (matchText x) patterns)))
-            (\(_ :: SomeException) -> P.cat)
-      )
-      $ \f -> liftIO $ warn' $ label <> ": unknown: \"" <> f <> "\""
+reportMissingFiles fs r = do
+  contents <- directoryContents rpath
+  forM_ (  filter (\x -> not (any (matchText x) patterns))
+         . map (T.drop len . toTextIgnore)
+         $ contents) $ \f ->
+    warn' $ label <> ": unknown: \"" <> f <> "\""
   where
     label = fs ^. fsName
     rpath = asDirectory (r ^. rsyncPath)

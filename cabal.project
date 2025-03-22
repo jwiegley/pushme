@@ -1,0 +1,7 @@
+packages: ./
+
+source-repository-package
+    type: git
+    location: https://github.com/jwiegley/logging.git
+    tag: 44f4b47b69a1a0ab006e45731fde35f56a220410
+    --sha256: 1x3hfrngwvi5gvm0y77z35r4fb4cjyfwd5hfgvkk3w3kx8fk2zjf

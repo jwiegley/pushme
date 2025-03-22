@@ -1,5 +1,5 @@
 name:       pushme
-version:    2.1.4
+version:    2.2.0
 synopsis:   Tool to synchronize directories with rsync, zfs or git-annex
 github:     jwiegley/pushme
 author:     John Wiegley
@@ -20,15 +20,11 @@ dependencies:
   - foldl
   - io-storage           >= 0.3
   - lens                 >= 4.9
-  - logging              >= 3.0
+  - logging              >= 3.0.6
   - monad-logger         >= 0.3
   - old-locale           >= 1.0
   - optparse-applicative >= 0.10
   - parallel-io          >= 0.3
-  - pipes
-  - pipes-group
-  - pipes-safe
-  - pipes-text
   - regex-posix          >= 0.95
   - safe                 >= 0.3
   - shelly               >= 1.6
