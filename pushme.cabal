@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 708c35155c3476ccb512a1f7f2e871d5686a412e54ee627b711adc58eb0d6516
+-- hash: 39acf7825fbcc3fa7557d0a8bd8072666e56da90c0e973527b3f9e4366e2fd87
 
 name:           pushme
 version:        2.2.0
@@ -45,6 +45,7 @@ executable pushme
     , old-locale >=1.0
     , optparse-applicative >=0.10
     , parallel-io >=0.3
+    , process >=1.6
     , regex-posix >=0.95
     , safe >=0.3
     , shelly >=1.6

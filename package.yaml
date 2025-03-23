@@ -25,6 +25,7 @@ dependencies:
   - old-locale           >= 1.0
   - optparse-applicative >= 0.10
   - parallel-io          >= 0.3
+  - process              >= 1.6
   - regex-posix          >= 0.95
   - safe                 >= 0.3
   - shelly               >= 1.6

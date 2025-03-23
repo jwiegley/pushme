@@ -18,6 +18,7 @@ import qualified Control.Foldl as L
 import Control.Lens
 import Control.Logging
 import Control.Monad
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Reader
 import Data.Aeson hiding (Options)
 import qualified Data.ByteString as B (readFile)
@@ -36,13 +37,15 @@ import Data.Ord (comparing)
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
 import Data.Yaml (decodeThrow)
 import GHC.Conc (setNumCapabilities)
 import Pushme.Options (Options (..), getOptions)
 import Safe hiding (at)
-import Shelly.Lifted hiding (FilePath, (</>))
 import System.Directory
+import System.Exit
 import System.FilePath.Posix
+import System.Process hiding (env)
 import Text.Printf (printf)
 import Text.Regex.Posix ((=~))
 
@@ -55,8 +58,7 @@ data Rsync = Rsync
     _rsyncDeleteExcluded :: Maybe Bool,
     _rsyncSendOnly :: Maybe Bool,
     _rsyncReceiveOnly :: Maybe Bool,
-    _rsyncReceiveFrom :: Maybe [Text],
-    _rsyncEscalateToRoot :: Maybe Bool
+    _rsyncReceiveFrom :: Maybe [Text]
   }
   deriving (Show, Eq)
 
@@ -72,7 +74,6 @@ instance FromJSON Rsync where
       <*> v .:? "SendOnly"
       <*> v .:? "ReceiveOnly"
       <*> v .:? "ReceiveFrom"
-      <*> v .:? "EscalateToRoot"
   parseJSON _ = errorL "Error parsing Rsync"
 
 makeLenses ''Rsync
@@ -132,10 +133,6 @@ instance FromJSON Fileset where
         fs'
           & stores . traverse . rsyncReceiveFrom
             %~ \case Nothing -> Just (fromJSON' xs); x -> x
-      k "EscalateToRoot" xs fs' =
-        fs'
-          & stores . traverse . rsyncEscalateToRoot
-            %~ \case Nothing -> Just (fromJSON' xs); x -> x
       k _ _ fs' = fs'
   parseJSON _ = errorL "Error parsing Fileset"
 
@@ -177,11 +174,8 @@ targetHost bnd
   | isLocal bnd = Nothing
   | otherwise = Just (bnd ^. target)
 
-data ExeMode = Normal | Sudo | SudoAsRoot
-
 data ExeEnv = ExeEnv
-  { exeMode :: ExeMode,
-    exeRemote :: Maybe Host,
+  { exeRemote :: Maybe Host,
     exeCwd :: Maybe FilePath,
     -- | Discard process output.
     exeDiscard :: Bool,
@@ -189,16 +183,13 @@ data ExeEnv = ExeEnv
     exeFindCmd :: Bool
   }
 
-type App a = ReaderT Options Sh a
+type App a = ReaderT Options IO a
 
 defaultExeEnv :: ExeEnv
-defaultExeEnv = ExeEnv Normal Nothing Nothing False True
+defaultExeEnv = ExeEnv Nothing Nothing False True
 
 env :: Binding -> ExeEnv
-env bnd = ExeEnv Normal (targetHost bnd) Nothing False True
-
-sudoEnv :: Binding -> ExeEnv
-sudoEnv bnd = (env bnd) {exeMode = Sudo}
+env bnd = ExeEnv (targetHost bnd) Nothing False True
 
 main :: IO ()
 main = withStdoutLogging $ do
@@ -259,16 +250,16 @@ readDataFile :: (FromJSON a) => FilePath -> IO a
 readDataFile p = do
   d <- decodeThrow <$> B.readFile p
   case d of
-    Nothing -> errorL $ "Failed to read file " <> toTextIgnore p
+    Nothing -> errorL $ "Failed to read file " <> pack p
     Just d' -> return d'
 
 processBindings :: Options -> Map Text Host -> IO ()
 processBindings opts hosts = do
   fsets <- readFilesets opts
-  thisHost <- T.init <$> shelly (silently $ cmd "hostname")
+  thisHost <- init <$> readProcess "hostname" [] ""
   let dflt = defaultHost (pack (fromName opts))
       here = case dflt of
-        Host "" _ -> hosts ^. at thisHost . non dflt . hostName
+        Host "" _ -> hosts ^. at (pack thisHost) . non dflt . hostName
         _ -> dflt ^. hostName
   when (T.null here) $
     errorL "Please identify the current host using --from"
@@ -323,7 +314,7 @@ relevantBindings opts thisHost hosts fsets =
 applyBinding :: Options -> Binding -> IO ()
 applyBinding opts bnd
   | dump opts = printBinding bnd
-  | otherwise = shelly $ silently $ runReaderT (syncBinding bnd) opts
+  | otherwise = runReaderT (syncBinding bnd) opts
 
 printBinding :: Binding -> IO ()
 printBinding bnd = do
@@ -338,7 +329,7 @@ printBinding bnd = do
           (show c)
 
 syncBinding :: Binding -> App ()
-syncBinding bnd = errExit False $ do
+syncBinding bnd = do
   liftIO $
     log' $
       "Sending "
@@ -350,11 +341,11 @@ syncBinding bnd = errExit False $ do
   syncStores bnd (bnd ^. this) (bnd ^. that)
 
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
-checkDirectory _ path False = test_d path
-checkDirectory (isLocal -> True) path True = test_d path
+checkDirectory _ path False = liftIO $ doesDirectoryExist path
+checkDirectory (isLocal -> True) path True = liftIO $ doesDirectoryExist path
 checkDirectory bnd path True = do
-  execute_ (env bnd) "test" ["-d", escape (toTextIgnore path)]
-  (== 0) <$> lastExitCode
+  ec <- execute_ (env bnd) "test" ["-d", escape (pack path)]
+  pure $ ec == ExitSuccess
 
 getStorePath :: Binding -> Rsync -> Bool -> FilePath
 getStorePath bnd s wantTarget = s ^. rsyncPath
@@ -371,12 +362,12 @@ syncStores bnd s1 s2 = do
         l
         s2
         ( case h of
-            Nothing -> toTextIgnore r
-            Just targ -> targ <> ":" <> toTextIgnore r
+            Nothing -> pack r
+            Just targ -> targ <> ":" <> pack r
         )
     else liftIO $ do
-      warn $ "Either local directory missing: " <> toTextIgnore l
-      warn $ "OR remote directory missing: " <> toTextIgnore r
+      warn $ "Either local directory missing: " <> pack l
+      warn $ "OR remote directory missing: " <> pack r
   where
     h = case targetHost bnd of
       Nothing -> Nothing
@@ -436,21 +427,14 @@ rsync bnd srcRsync src destRsync dest =
               ( srcRsync ^. rsyncDeleteExcluded
                   <|> destRsync ^. rsyncDeleteExcluded
               )
-          escalate =
-            fromMaybe
-              False
-              ( srcRsync ^. rsyncEscalateToRoot
-                  <|> destRsync ^. rsyncEscalateToRoot
-              )
           go xs =
             doRsync
               (fs ^. fsName)
               xs
-              (toTextIgnore src)
+              (pack src)
               dest
               nol
               dex
-              escalate
       case rfs of
         [] -> go []
         filters -> do
@@ -458,22 +442,22 @@ rsync bnd srcRsync src destRsync dest =
             liftIO $
               reportMissingFiles fs srcRsync
 
-          withTmpDir $ \p -> do
-            let fpath = p </> "filters"
-            writefile fpath (T.unlines filters)
+          tmpDir <- liftIO getTemporaryDirectory
+          let fpath = tmpDir </> "filters"
+          liftIO $ T.writeFile fpath (T.unlines filters)
 
-            ignoreFile <- liftIO $ expandPath "~/.config/ignore.lst"
-            exists <- liftIO $ doesFileExist ignoreFile
-            opts <- ask
-            when (verbose opts) $ do
-              c <- liftIO $ B.readFile fpath
-              liftIO $ debug' $ "INCLUDE FROM:\n" <> T.decodeUtf8 c
-              when exists $ do
-                c' <- liftIO $ B.readFile ignoreFile
-                liftIO $ debug' $ "INCLUDE FROM:\n" <> T.decodeUtf8 c'
-            go $
-              "--include-from=" <> toTextIgnore fpath
-                : ["--include-from=" <> toTextIgnore ignoreFile | exists]
+          ignoreFile <- liftIO $ expandPath "~/.config/ignore.lst"
+          exists <- liftIO $ doesFileExist ignoreFile
+          opts <- ask
+          when (verbose opts) $ do
+            c <- liftIO $ B.readFile fpath
+            liftIO $ debug' $ "INCLUDE FROM:\n" <> T.decodeUtf8 c
+            when exists $ do
+              c' <- liftIO $ B.readFile ignoreFile
+              liftIO $ debug' $ "INCLUDE FROM:\n" <> T.decodeUtf8 c'
+          go $
+            "--include-from=" <> pack fpath
+              : ["--include-from=" <> pack ignoreFile | exists]
   where
     fs = bnd ^. fileset
 
@@ -482,7 +466,7 @@ reportMissingFiles fs r = do
   contents <- directoryContents rpath
   forM_
     ( filter (\x -> not (any (matchText x) patterns))
-        . map (T.drop len . toTextIgnore)
+        . map (T.drop len . pack)
         $ contents
     )
     $ \f ->
@@ -490,7 +474,7 @@ reportMissingFiles fs r = do
   where
     label = fs ^. fsName
     rpath = asDirectory (r ^. rsyncPath)
-    len = T.length (toTextIgnore rpath)
+    len = T.length (pack rpath)
     filters = r ^. rsyncFilters . non []
 
     patterns =
@@ -513,8 +497,8 @@ reportMissingFiles fs r = do
         . T.replace "?" "."
         . T.replace "." "\\."
 
-doRsync :: Text -> [Text] -> Text -> Text -> Bool -> Bool -> Bool -> App ()
-doRsync label options src dest noLinks deleteExcluded escalate = do
+doRsync :: Text -> [Text] -> Text -> Text -> Bool -> Bool -> App ()
+doRsync label options src dest noLinks deleteExcluded = do
   opts <- ask
   let den = (\x -> if x then 1000 else 1024) $ siUnits opts
       sshCmd = ssh opts
@@ -551,14 +535,6 @@ doRsync label options src dest noLinks deleteExcluded escalate = do
           <> ["--delete-excluded" | deleteExcluded]
           <> ["--checksum" | checksum opts]
           <> (if verbose opts then ["-P"] else ["--stats"])
-          <> [ pack
-                 ( "--rsync-path=sudo "
-                     ++ if not (null rsyncCmd)
-                       then rsyncCmd
-                       else "rsync"
-                 )
-               | toRemote && escalate
-             ]
           <> options
           <> [ src,
                if toRemote
@@ -566,20 +542,10 @@ doRsync label options src dest noLinks deleteExcluded escalate = do
                  else dest
              ]
       analyze = not (verbose opts) && not (noSync opts)
-      env' =
-        defaultExeEnv
-          { exeMode =
-              if escalate
-                then
-                  if toRemote
-                    then SudoAsRoot
-                    else Sudo
-                else Normal,
-            exeDiscard = not analyze
-          }
+      env' = defaultExeEnv {exeDiscard = not analyze}
 
-  output <- execute env' "rsync" args
-  when analyze $ do
+  (ec, output) <- execute env' "rsync" args
+  when (ec == ExitSuccess && analyze) $ do
     let stats =
           M.fromList
             $ map
@@ -622,64 +588,71 @@ doRsync label options src dest noLinks deleteExcluded escalate = do
           ("", 0)
         . tshow
 
-execute :: ExeEnv -> FilePath -> [Text] -> App Text
+execute :: ExeEnv -> FilePath -> [Text] -> App (ExitCode, Text)
 execute ExeEnv {..} name args = do
   opts <- ask
-  cmdName <- (if exeFindCmd then findCmd else return) name
-  let (name', args') = case exeMode of
-        Normal -> (cmdName, args)
-        Sudo -> ("sudo", toTextIgnore cmdName : args)
-        SudoAsRoot -> sudoAsRoot cmdName args
+  cmdName <-
+    liftIO $
+      if exeFindCmd
+        then findCmd name
+        else return name
+  let (name', args') = (cmdName, args)
 
       (modifier, name'', args'') = case exeRemote of
         Nothing -> (id, name', args')
         Just h -> remote opts h $ case exeCwd of
           Nothing -> (id, name', args')
           Just cwd ->
-            ( escaping False,
-              fromText $
+            ( id, -- jww (2025-03-23): Was `escaping False`
+              unpack $
                 T.concat $
                   [ "\"cd ",
-                    escape (toTextIgnore cwd),
+                    escape (pack cwd),
                     "; ",
-                    escape (toTextIgnore name'),
+                    escape (pack name'),
                     " "
                   ]
                     <> intersperse " " (map escape args')
                     <> ["\""],
               []
             )
-      runner p xs
-        | exeDiscard = run_ p xs >> return ""
-        | otherwise = run p xs
+      runner p xs = readProcessWithExitCode p xs ""
       runner' p xs =
         ( case exeCwd of
-            Just cwd | isNothing exeRemote -> chdir cwd
+            Just cwd
+              | isNothing exeRemote -> \action -> do
+                  opts <- ask
+                  liftIO $
+                    do
+                      cur <- getCurrentDirectory
+                      (setCurrentDirectory cwd >> runReaderT action opts)
+                        `finally` setCurrentDirectory cur
             _ -> id
         )
           $ modifier
-          $ runner p xs
+          $ liftIO (runner p xs)
   if dryRun opts || noSync opts
-    then return ""
+    then return (ExitSuccess, "")
     else do
       let (sshCmd : sshArgs) = words name''
-      n <- findCmd sshCmd
+      n <- liftIO $ findCmd sshCmd
       liftIO $
         debug' $
-          toTextIgnore n
+          pack n
             <> " "
             <> T.intercalate
               " "
               (map tshow (map T.pack sshArgs ++ args''))
-      runner' n args''
+      (ec, out, _err) <- runner' n (map unpack args'')
+      pure (ec, pack out)
   where
     findCmd n
       -- Assume commands with spaces in them are "known"
-      | " " `T.isInfixOf` toTextIgnore n = return n
+      | " " `T.isInfixOf` pack n = return n
       | isRelative n = do
-          c <- which n
+          c <- findExecutable n
           case c of
-            Nothing -> errorL $ "Failed to find command: " <> toTextIgnore n
+            Nothing -> errorL $ "Failed to find command: " <> pack n
             Just c' -> return c'
       | otherwise = return n
 
@@ -692,7 +665,7 @@ execute ExeEnv {..} name args = do
       let sshCmd = ssh opts
        in ( m,
             if null sshCmd then "ssh" else sshCmd,
-            host ^. hostName : toTextIgnore p : xs
+            host ^. hostName : pack p : xs
           )
 
     sudoAsRoot :: FilePath -> [Text] -> (FilePath, [Text])
@@ -703,20 +676,22 @@ execute ExeEnv {..} name args = do
           "root",
           "-c",
           -- Pass the argument to su as a single, escaped string.
-          T.unwords (map escape (toTextIgnore p : xs))
+          T.unwords (map escape (pack p : xs))
         ]
       )
 
-execute_ :: ExeEnv -> FilePath -> [Text] -> App ()
-execute_ env' fp args = void $ execute env' {exeDiscard = True} fp args
+execute_ :: ExeEnv -> FilePath -> [Text] -> App ExitCode
+execute_ env' fp args = do
+  (ec, _) <- execute env' {exeDiscard = True} fp args
+  pure ec
 
 expandPath :: FilePath -> IO FilePath
 expandPath ('~' : '/' : p) = (</> p) <$> getHomeDirectory
 expandPath p = return p
 
 asDirectory :: FilePath -> FilePath
-asDirectory (toTextIgnore -> fp) =
-  fromText $
+asDirectory (pack -> fp) =
+  unpack $
     if T.null fp || T.last fp /= '/'
       then T.append fp "/"
       else fp
