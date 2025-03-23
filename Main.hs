@@ -10,35 +10,41 @@
 
 module Main where
 
-import           Control.Applicative
-import           Control.Arrow
-import           Control.Concurrent.ParallelIO (parallel_, stopGlobalPool)
-import           Control.Exception
+import Control.Applicative
+import Control.Arrow
+import Control.Concurrent.ParallelIO (parallel_, stopGlobalPool)
+import Control.Exception
 import qualified Control.Foldl as L
-import           Control.Lens
-import           Control.Logging
-import           Control.Monad
-import           Control.Monad.Trans.Reader
-import           Data.Aeson hiding (Options)
+import Control.Lens
+import Control.Logging
+import Control.Monad
+import Control.Monad.Trans.Reader
+import Data.Aeson hiding (Options)
 import qualified Data.ByteString as B (readFile)
-import           Data.Char (isDigit)
-import           Data.List
-import           Data.Map (Map)
+import Data.Char (isDigit)
+import Data.List
+import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
-    ( catMaybes, fromJust, fromMaybe, isNothing, mapMaybe )
-import           Data.Ord (comparing)
-import           Data.Text (Text, pack, unpack)
+  ( catMaybes,
+    fromJust,
+    fromMaybe,
+    isNothing,
+    mapMaybe,
+  )
+import Data.Ord (comparing)
+import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
-import           Data.Yaml (decodeThrow)
-import           GHC.Conc (setNumCapabilities)
-import           Pushme.Options (Options (..), getOptions)
-import           Safe hiding (at)
-import           Shelly.Lifted hiding ((</>), FilePath)
-import           System.Directory
-import           System.FilePath.Posix
-import           Text.Printf (printf)
-import           Text.Regex.Posix ((=~))
+import qualified Data.Text.Encoding as T
+import Data.Yaml (decodeThrow)
+import GHC.Conc (setNumCapabilities)
+import Pushme.Options (Options (..), getOptions)
+import Safe hiding (at)
+import Shelly.Lifted hiding (FilePath, (</>))
+import System.Directory
+import System.FilePath.Posix
+import Text.Printf (printf)
+import Text.Regex.Posix ((=~))
 
 data Rsync = Rsync
   { _rsyncPath :: FilePath,
@@ -56,8 +62,17 @@ data Rsync = Rsync
 
 defaultRsync :: FilePath -> Rsync
 defaultRsync p =
-  Rsync p Nothing Nothing Nothing Nothing Nothing
-        Nothing Nothing Nothing Nothing
+  Rsync
+    p
+    Nothing
+    Nothing
+    Nothing
+    Nothing
+    Nothing
+    Nothing
+    Nothing
+    Nothing
+    Nothing
 
 instance FromJSON Rsync where
   parseJSON (Object v) =
@@ -157,7 +172,7 @@ data Fileset = Fileset
 
 makeLenses ''Fileset
 
-fromJSON' :: FromJSON a => Value -> a
+fromJSON' :: (FromJSON a) => Value -> a
 fromJSON' a = case fromJSON a of
   Error e -> errorL (pack e)
   Success x -> x
@@ -178,37 +193,46 @@ instance FromJSON Fileset where
         where
           k :: Text -> Value -> Fileset -> Fileset
           k "Filters" xs fs' =
-            fs' & stores . traverse . rsyncScheme . rsyncFilters
-              %~ \case Nothing -> Just (fromJSON' xs); x -> x
+            fs'
+              & stores . traverse . rsyncScheme . rsyncFilters
+                %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k "ReportMissing" xs fs' =
-            fs' & stores . traverse . rsyncScheme . rsyncReportMissing
-              %~ \case Nothing -> Just (fromJSON' xs); x -> x
+            fs'
+              & stores . traverse . rsyncScheme . rsyncReportMissing
+                %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k "NoLinks" xs fs' =
-            fs' & stores . traverse . rsyncScheme . rsyncNoLinks
-              %~ \case Nothing -> Just (fromJSON' xs); x -> x
+            fs'
+              & stores . traverse . rsyncScheme . rsyncNoLinks
+                %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k "DeleteExcluded" xs fs' =
-            fs' & stores . traverse . rsyncScheme . rsyncDeleteExcluded
-              %~ \case Nothing -> Just (fromJSON' xs); x -> x
+            fs'
+              & stores . traverse . rsyncScheme . rsyncDeleteExcluded
+                %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k "SendOnly" xs fs' =
-            fs' & stores . traverse . rsyncScheme . rsyncSendOnly
-              %~ \case Nothing -> Just (fromJSON' xs); x -> x
+            fs'
+              & stores . traverse . rsyncScheme . rsyncSendOnly
+                %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k "ReceiveOnly" xs fs' =
-            fs' & stores . traverse . rsyncScheme . rsyncReceiveOnly
-              %~ \case Nothing -> Just (fromJSON' xs); x -> x
+            fs'
+              & stores . traverse . rsyncScheme . rsyncReceiveOnly
+                %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k "ReceiveFrom" xs fs' =
-            fs' & stores . traverse . rsyncScheme . rsyncReceiveFrom
-              %~ \case Nothing -> Just (fromJSON' xs); x -> x
+            fs'
+              & stores . traverse . rsyncScheme . rsyncReceiveFrom
+                %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k "EscalateToRoot" xs fs' =
-            fs' & stores . traverse . rsyncScheme . rsyncEscalateToRoot
-              %~ \case Nothing -> Just (fromJSON' xs); x -> x
+            fs'
+              & stores . traverse . rsyncScheme . rsyncEscalateToRoot
+                %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k _ _ fs' = fs'
       f "Zfs" _ fs = fs
       f "Annex" z fs = M.foldrWithKey k fs z
         where
           k :: Text -> Value -> Fileset -> Fileset
           k "Flags" xs fs' =
-            fs' & stores . traverse . annexScheme . annexFlags
-              %~ \case Nothing -> Just (fromJSON' xs); x -> x
+            fs'
+              & stores . traverse . annexScheme . annexFlags
+                %~ \case Nothing -> Just (fromJSON' xs); x -> x
           k _ _ fs' = fs'
       f _ _ fs = fs
   parseJSON _ = errorL "Error parsing Fileset"
@@ -301,11 +325,11 @@ readHostsFile opts = do
       return $ M.fromList (concat wordMappings)
     else return mempty
   where
-   lineToMapping :: [String] -> Maybe [(Text, Host)]
-   lineToMapping [] = Nothing
-   lineToMapping (map T.pack -> (x:xs)) =
-     let h = Host x xs
-     in Just $ (x, h) : map (,h) xs
+    lineToMapping :: [String] -> Maybe [(Text, Host)]
+    lineToMapping [] = Nothing
+    lineToMapping (map T.pack -> (x : xs)) =
+      let h = Host x xs
+       in Just $ (x, h) : map (,h) xs
 
 directoryContents :: FilePath -> IO [FilePath]
 directoryContents topPath = do
@@ -327,9 +351,9 @@ readFilesets opts = do
   fmap (M.fromList . map ((^. fsName) &&& id)) $ do
     contents <- directoryContents confD
     forM (filter (\n -> takeExtension n == ".yml") contents) $
-        liftIO . readDataFile
+      liftIO . readDataFile
 
-readDataFile :: FromJSON a => FilePath -> IO a
+readDataFile :: (FromJSON a) => FilePath -> IO a
 readDataFile p = do
   d <- decodeThrow <$> B.readFile p
   case d of
@@ -381,8 +405,8 @@ relevantBindings opts thisHost hosts fsets =
           f
             | atsign = second T.tail
             | "/" `T.isInfixOf` thereRaw =
-              let [b, e] = T.splitOn "/" thereRaw
-               in const (b, e)
+                let [b, e] = T.splitOn "/" thereRaw
+                 in const (b, e)
             | otherwise = id
           (here, there) = f (hereRaw, thereRaw)
       Binding fs (getHost here) (getHost there)
@@ -397,11 +421,11 @@ relevantBindings opts thisHost hosts fsets =
 applyBinding :: Options -> Binding -> IO ()
 applyBinding opts bnd
   | dump opts =
-    printBinding bnd
+      printBinding bnd
   | bnd ^. bindCommand == BindingSnapshot =
-    shelly $ runReaderT (snapshotBinding bnd) opts
+      shelly $ runReaderT (snapshotBinding bnd) opts
   | otherwise =
-    shelly $ silently $ runReaderT (syncBinding bnd) opts
+      shelly $ silently $ runReaderT (syncBinding bnd) opts
 
 printBinding :: Binding -> IO ()
 printBinding bnd = do
@@ -659,13 +683,21 @@ rsync bnd srcRsync src destRsync dest =
               ( srcRsync ^. rsyncEscalateToRoot
                   <|> destRsync ^. rsyncEscalateToRoot
               )
-          go xs = doRsync (fs ^. fsName) xs (toTextIgnore src)
-                          dest nol dex escalate
+          go xs =
+            doRsync
+              (fs ^. fsName)
+              xs
+              (toTextIgnore src)
+              dest
+              nol
+              dex
+              escalate
       case rfs of
         [] -> go []
         filters -> do
           when (srcRsync ^. rsyncReportMissing . non False) $
-            liftIO $ reportMissingFiles fs srcRsync
+            liftIO $
+              reportMissingFiles fs srcRsync
 
           withTmpDir $ \p -> do
             let fpath = p </> "filters"
@@ -673,19 +705,29 @@ rsync bnd srcRsync src destRsync dest =
 
             ignoreFile <- liftIO $ expandPath "~/.config/ignore.lst"
             exists <- liftIO $ doesFileExist ignoreFile
-            go $ "--include-from=" <> toTextIgnore fpath :
-                 ["--include-from=" <> toTextIgnore ignoreFile | exists]
-
+            opts <- ask
+            when (verbose opts) $ do
+              c <- liftIO $ B.readFile fpath
+              liftIO $ debug' $ "INCLUDE FROM:\n" <> T.decodeUtf8 c
+              when exists $ do
+                c' <- liftIO $ B.readFile ignoreFile
+                liftIO $ debug' $ "INCLUDE FROM:\n" <> T.decodeUtf8 c'
+            go $
+              "--include-from=" <> toTextIgnore fpath
+                : ["--include-from=" <> toTextIgnore ignoreFile | exists]
   where
     fs = bnd ^. fileset
 
 reportMissingFiles :: Fileset -> Rsync -> IO ()
 reportMissingFiles fs r = do
   contents <- directoryContents rpath
-  forM_ (  filter (\x -> not (any (matchText x) patterns))
-         . map (T.drop len . toTextIgnore)
-         $ contents) $ \f ->
-    warn' $ label <> ": unknown: \"" <> f <> "\""
+  forM_
+    ( filter (\x -> not (any (matchText x) patterns))
+        . map (T.drop len . toTextIgnore)
+        $ contents
+    )
+    $ \f ->
+      warn' $ label <> ": unknown: \"" <> f <> "\""
   where
     label = fs ^. fsName
     rpath = asDirectory (r ^. rsyncPath)
@@ -767,24 +809,26 @@ doRsync label options src dest noLinks deleteExcluded escalate = do
       analyze = not (verbose opts) && not (noSync opts)
       env' =
         defaultExeEnv
-          { exeMode = if escalate
-                      then if toRemote
-                           then SudoAsRoot
-                           else Sudo
-                      else Normal,
+          { exeMode =
+              if escalate
+                then
+                  if toRemote
+                    then SudoAsRoot
+                    else Sudo
+                else Normal,
             exeDiscard = not analyze
           }
 
   output <- execute env' "rsync" args
   when analyze $ do
     let stats =
-          M.fromList $
-            map
+          M.fromList
+            $ map
               ( fmap (T.filter (/= ',') . (!! 1) . T.words)
                   . T.breakOn ": "
               )
-              $ filter (": " `T.isInfixOf`) $
-                T.lines output
+            $ filter (": " `T.isInfixOf`)
+            $ T.lines output
         files = field "Number of files" stats
         sent =
           field "Number of regular files transferred" stats
@@ -854,7 +898,8 @@ execute ExeEnv {..} name args = do
             Just cwd | isNothing exeRemote -> chdir cwd
             _ -> id
         )
-          $ modifier $ runner p xs
+          $ modifier
+          $ runner p xs
   if dryRun opts || noSync opts
     then return ""
     else do
@@ -873,10 +918,10 @@ execute ExeEnv {..} name args = do
       -- Assume commands with spaces in them are "known"
       | " " `T.isInfixOf` toTextIgnore n = return n
       | isRelative n = do
-        c <- which n
-        case c of
-          Nothing -> errorL $ "Failed to find command: " <> toTextIgnore n
-          Just c' -> return c'
+          c <- which n
+          case c of
+            Nothing -> errorL $ "Failed to find command: " <> toTextIgnore n
+            Just c' -> return c'
       | otherwise = return n
 
     remote ::
@@ -920,13 +965,13 @@ asDirectory (toTextIgnore -> fp) =
 escape :: Text -> Text
 escape x
   | "\"" `T.isInfixOf` x || " " `T.isInfixOf` x =
-    "'" <> T.replace "\"" "\\\"" x <> "'"
+      "'" <> T.replace "\"" "\\\"" x <> "'"
   | otherwise = x
 
 matchText :: Text -> Text -> Bool
 matchText x y = unpack x =~ unpack y
 
-tshow :: Show a => a -> Text
+tshow :: (Show a) => a -> Text
 tshow = pack . show
 
 humanReadable :: Integer -> Integer -> Text
@@ -945,13 +990,13 @@ humanReadable den x =
     f :: Integer -> String -> Maybe String
     f n s
       | x < (den ^ succ n) =
-        Just $
-          if n == 0
-            then printf ("%d" ++ s) x
-            else
-              printf
-                ("%." ++ show (min 3 (pred n)) ++ "f" ++ s)
-                (fromIntegral x / (fromIntegral den ^ n :: Double))
+          Just $
+            if n == 0
+              then printf ("%d" ++ s) x
+              else
+                printf
+                  ("%." ++ show (min 3 (pred n)) ++ "f" ++ s)
+                  (fromIntegral x / (fromIntegral den ^ n :: Double))
     f _ _ = Nothing
 
 -- Main.hs (pushme) ends here
