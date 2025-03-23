@@ -41,7 +41,6 @@ import qualified Data.Text.IO as T
 import Data.Yaml (decodeThrow)
 import GHC.Conc (setNumCapabilities)
 import Pushme.Options (Options (..), getOptions)
-import Safe hiding (at)
 import System.Directory
 import System.Exit
 import System.FilePath.Posix

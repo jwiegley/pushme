@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 39acf7825fbcc3fa7557d0a8bd8072666e56da90c0e973527b3f9e4366e2fd87
+-- hash: ce4a713aae7d2aacc1bcb5ff5609c4e3a31280d7962e20f663b579f0dcc91f5e
 
 name:           pushme
-version:        2.2.0
+version:        3.0.0
 synopsis:       Tool to synchronize directories with rsync, zfs or git-annex
 description:    Script I use for synchronizing data among machines.
 category:       System
@@ -38,7 +38,6 @@ executable pushme
     , directory
     , filepath
     , foldl
-    , io-storage >=0.3
     , lens >=4.9
     , logging >=3.0.6
     , monad-logger >=0.3
@@ -47,8 +46,6 @@ executable pushme
     , parallel-io >=0.3
     , process >=1.6
     , regex-posix >=0.95
-    , safe >=0.3
-    , shelly >=1.6
     , system-fileio >=0.3
     , system-filepath >=0.4
     , temporary >=1.2
