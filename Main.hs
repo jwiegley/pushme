@@ -60,20 +60,6 @@ data Rsync = Rsync
   }
   deriving (Show, Eq)
 
-defaultRsync :: FilePath -> Rsync
-defaultRsync p =
-  Rsync
-    p
-    Nothing
-    Nothing
-    Nothing
-    Nothing
-    Nothing
-    Nothing
-    Nothing
-    Nothing
-    Nothing
-
 instance FromJSON Rsync where
   parseJSON (Object v) =
     Rsync
@@ -91,82 +77,11 @@ instance FromJSON Rsync where
 
 makeLenses ''Rsync
 
-data Zfs = Zfs
-  { _zfsPath :: FilePath,
-    _zfsPoolPath :: FilePath
-  }
-  deriving (Show, Eq)
-
-instance FromJSON Zfs where
-  parseJSON (Object v) =
-    Zfs
-      <$> v .: "Path"
-      <*> v .: "PoolPath"
-  parseJSON _ = errorL "Error parsing Zfs"
-
-makeLenses ''Zfs
-
-data Annex = Annex
-  { _annexPath :: FilePath,
-    _annexName :: Maybe Text,
-    _annexFlags :: Maybe [Text],
-    _annexIsPrimary :: Maybe Bool
-  }
-  deriving (Show, Eq)
-
-instance FromJSON Annex where
-  parseJSON (Object v) = do
-    p <- v .: "Path"
-    Annex p
-      <$> v .:? "Name"
-      <*> v .:? "Flags"
-      <*> v .:? "Primary"
-  parseJSON _ = errorL "Error parsing Annex"
-
-makeLenses ''Annex
-
-data StorageScheme
-  = SchemeRsync Rsync
-  | SchemeZfs Zfs
-  | SchemeAnnex Annex
-  deriving (Show, Eq)
-
-makePrisms ''StorageScheme
-
-newtype Store = Store
-  { _schemes :: Map Text StorageScheme
-  }
-  deriving (Show, Eq)
-
-makeLenses ''Store
-
-instance FromJSON Store where
-  parseJSON (Object v) = do
-    mpath <- fmap (SchemeRsync . defaultRsync) <$> v .:? "Path"
-    mrsync <- fmap SchemeRsync <$> v .:? "Rsync"
-    mzfs <- fmap SchemeZfs <$> v .:? "Zfs"
-    mannex <- fmap SchemeAnnex <$> v .:? "Annex"
-    return $
-      Store mempty
-        & schemes . at "rsync" .~ (mrsync <|> mpath)
-        & schemes . at "zfs" .~ mzfs
-        & schemes . at "annex" .~ mannex
-  parseJSON _ = errorL "Error parsing Store"
-
-rsyncScheme :: Traversal' Store Rsync
-rsyncScheme = schemes . ix "rsync" . _SchemeRsync
-
-zfsScheme :: Traversal' Store Zfs
-zfsScheme = schemes . ix "zfs" . _SchemeZfs
-
-annexScheme :: Traversal' Store Annex
-annexScheme = schemes . ix "annex" . _SchemeAnnex
-
 data Fileset = Fileset
   { _fsName :: Text,
     _fsClass :: Text,
     _fsPriority :: Int,
-    _stores :: Map Text Store
+    _stores :: Map Text Rsync
   }
   deriving (Show, Eq)
 
@@ -186,55 +101,42 @@ instance FromJSON Fileset where
         <*> v .:? "Priority" .!= 1000
         <*> v .:? "Stores" .!= mempty
     opts <- v .:? "Options" .!= mempty
-    return $ M.foldrWithKey f fset (opts :: Map Text (Map Text Value))
+    return $ M.foldrWithKey k fset (opts :: Map Text Value)
     where
-      f :: Text -> Map Text Value -> Fileset -> Fileset
-      f "Rsync" z fs = M.foldrWithKey k fs z
-        where
-          k :: Text -> Value -> Fileset -> Fileset
-          k "Filters" xs fs' =
-            fs'
-              & stores . traverse . rsyncScheme . rsyncFilters
-                %~ \case Nothing -> Just (fromJSON' xs); x -> x
-          k "ReportMissing" xs fs' =
-            fs'
-              & stores . traverse . rsyncScheme . rsyncReportMissing
-                %~ \case Nothing -> Just (fromJSON' xs); x -> x
-          k "NoLinks" xs fs' =
-            fs'
-              & stores . traverse . rsyncScheme . rsyncNoLinks
-                %~ \case Nothing -> Just (fromJSON' xs); x -> x
-          k "DeleteExcluded" xs fs' =
-            fs'
-              & stores . traverse . rsyncScheme . rsyncDeleteExcluded
-                %~ \case Nothing -> Just (fromJSON' xs); x -> x
-          k "SendOnly" xs fs' =
-            fs'
-              & stores . traverse . rsyncScheme . rsyncSendOnly
-                %~ \case Nothing -> Just (fromJSON' xs); x -> x
-          k "ReceiveOnly" xs fs' =
-            fs'
-              & stores . traverse . rsyncScheme . rsyncReceiveOnly
-                %~ \case Nothing -> Just (fromJSON' xs); x -> x
-          k "ReceiveFrom" xs fs' =
-            fs'
-              & stores . traverse . rsyncScheme . rsyncReceiveFrom
-                %~ \case Nothing -> Just (fromJSON' xs); x -> x
-          k "EscalateToRoot" xs fs' =
-            fs'
-              & stores . traverse . rsyncScheme . rsyncEscalateToRoot
-                %~ \case Nothing -> Just (fromJSON' xs); x -> x
-          k _ _ fs' = fs'
-      f "Zfs" _ fs = fs
-      f "Annex" z fs = M.foldrWithKey k fs z
-        where
-          k :: Text -> Value -> Fileset -> Fileset
-          k "Flags" xs fs' =
-            fs'
-              & stores . traverse . annexScheme . annexFlags
-                %~ \case Nothing -> Just (fromJSON' xs); x -> x
-          k _ _ fs' = fs'
-      f _ _ fs = fs
+      k :: Text -> Value -> Fileset -> Fileset
+      k "Filters" xs fs' =
+        fs'
+          & stores . traverse . rsyncFilters
+            %~ \case Nothing -> Just (fromJSON' xs); x -> x
+      k "ReportMissing" xs fs' =
+        fs'
+          & stores . traverse . rsyncReportMissing
+            %~ \case Nothing -> Just (fromJSON' xs); x -> x
+      k "NoLinks" xs fs' =
+        fs'
+          & stores . traverse . rsyncNoLinks
+            %~ \case Nothing -> Just (fromJSON' xs); x -> x
+      k "DeleteExcluded" xs fs' =
+        fs'
+          & stores . traverse . rsyncDeleteExcluded
+            %~ \case Nothing -> Just (fromJSON' xs); x -> x
+      k "SendOnly" xs fs' =
+        fs'
+          & stores . traverse . rsyncSendOnly
+            %~ \case Nothing -> Just (fromJSON' xs); x -> x
+      k "ReceiveOnly" xs fs' =
+        fs'
+          & stores . traverse . rsyncReceiveOnly
+            %~ \case Nothing -> Just (fromJSON' xs); x -> x
+      k "ReceiveFrom" xs fs' =
+        fs'
+          & stores . traverse . rsyncReceiveFrom
+            %~ \case Nothing -> Just (fromJSON' xs); x -> x
+      k "EscalateToRoot" xs fs' =
+        fs'
+          & stores . traverse . rsyncEscalateToRoot
+            %~ \case Nothing -> Just (fromJSON' xs); x -> x
+      k _ _ fs' = fs'
   parseJSON _ = errorL "Error parsing Fileset"
 
 data Host = Host
@@ -257,8 +159,8 @@ data Binding = Binding
   { _fileset :: Fileset,
     _source :: Host,
     _target :: Host,
-    _this :: Store,
-    _that :: Store,
+    _this :: Rsync,
+    _that :: Rsync,
     _bindCommand :: BindingCommand
   }
   deriving (Show, Eq)
@@ -420,12 +322,8 @@ relevantBindings opts thisHost hosts fsets =
 
 applyBinding :: Options -> Binding -> IO ()
 applyBinding opts bnd
-  | dump opts =
-      printBinding bnd
-  | bnd ^. bindCommand == BindingSnapshot =
-      shelly $ runReaderT (snapshotBinding bnd) opts
-  | otherwise =
-      shelly $ silently $ runReaderT (syncBinding bnd) opts
+  | dump opts = printBinding bnd
+  | otherwise = shelly $ silently $ runReaderT (syncBinding bnd) opts
 
 printBinding :: Binding -> IO ()
 printBinding bnd = do
@@ -437,17 +335,7 @@ printBinding bnd = do
         printf
           "%-12s %s"
           (unpack (fs ^. fsName))
-          (show (c ^. schemes))
-
-snapshotBinding :: Binding -> App ()
-snapshotBinding bnd@((^? that . zfsScheme) -> Just z) = do
-  mrev <- determineLastRev (env bnd) z
-  let nextRev = maybe 1 succ mrev
-      thatSnapshot =
-        toTextIgnore $ z ^. zfsPoolPath <> "@" <> show nextRev
-  liftIO $ log' $ "Creating snapshot " <> thatSnapshot
-  execute_ (env bnd) "zfs" ["snapshot", thatSnapshot]
-snapshotBinding _ = return ()
+          (show c)
 
 syncBinding :: Binding -> App ()
 syncBinding bnd = errExit False $ do
@@ -461,13 +349,6 @@ syncBinding bnd = errExit False $ do
         <> (bnd ^. target . hostName)
   syncStores bnd (bnd ^. this) (bnd ^. that)
 
-syncStores :: Binding -> Store -> Store -> App ()
-syncStores bnd ((^? annexScheme) -> Just a1) ((^? annexScheme) -> Just a2) =
-  syncAnnexSchemes bnd a1 a2
-syncStores bnd ((^? zfsScheme) -> Just z1) ((^? zfsScheme) -> Just z2) =
-  syncZfsSchemes bnd z1 z2
-syncStores bnd s1 s2 = syncUsingRsync bnd s1 s2
-
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
 checkDirectory _ path False = test_d path
 checkDirectory (isLocal -> True) path True = test_d path
@@ -475,158 +356,36 @@ checkDirectory bnd path True = do
   execute_ (env bnd) "test" ["-d", escape (toTextIgnore path)]
   (== 0) <$> lastExitCode
 
-getStorePath :: Binding -> Store -> Bool -> Maybe FilePath
-getStorePath bnd s wantTarget =
-  (s ^? rsyncScheme . rsyncPath)
-    <|> (s ^? zfsScheme . zfsPath)
-    <|> (s ^? annexScheme . annexPath)
-    <|> errorL
-      ( "Could not find path for "
-          <> ( ( if wantTarget
-                   then bnd ^. target
-                   else bnd ^. source
-               )
-                 ^. hostName
-             )
-          <> "/"
-          <> (bnd ^. fileset . fsName)
-      )
+getStorePath :: Binding -> Rsync -> Bool -> FilePath
+getStorePath bnd s wantTarget = s ^. rsyncPath
 
-syncAnnexSchemes :: Binding -> Annex -> Annex -> App ()
-syncAnnexSchemes bnd a1 a2 = do
-  opts <- ask
-  exists1 <- checkDirectory bnd (a1 ^. annexPath) False
-  exists2 <- checkDirectory bnd (a2 ^. annexPath) True
-  if exists1 && exists2
-    then do
-      let runner1_ =
-            execute_ $
-              (env bnd)
-                { exeCwd = Just (a1 ^. annexPath),
-                  exeRemote = Nothing
-                }
-          runner2_ =
-            execute_ $
-              (env bnd)
-                { exeCwd = Just (a2 ^. annexPath),
-                  exeFindCmd = isLocal bnd
-                }
-
-      -- Add, copy, and sync from the source.
-      runner1_ "git-annex" $
-        ["-q" | not (verbose opts)]
-          <> ["add", "-c", "alwayscommit=false", "."]
-      runner1_ "git-annex" $
-        ["-q" | not (verbose opts)]
-          <> [ "--auto"
-               | not (a2 ^. annexIsPrimary . non False || copyAll opts)
-             ]
-          <> ["copy", "-c", "alwayscommit=false"]
-          <> ["--not", "--in", annexTarget]
-          <> a1 ^. annexFlags . non []
-          <> ["--to", annexTarget]
-      runner1_ "git-annex" $ ["-q" | not (verbose opts)] <> ["sync"]
-
-      -- Sync to the destination.
-      runner2_ "git-annex" $ ["-q" | not (verbose opts)] <> ["sync"]
-
-      liftIO $ log' $ (bnd ^. fileset . fsName) <> ": Git Annex synchronized"
-    else
-      liftIO $
-        warn $
-          "Remote directory missing: "
-            <> toTextIgnore (a2 ^. annexPath)
-  where
-    annexTarget = a2 ^. annexName . non (bnd ^. target . hostName)
-
-syncZfsSchemes :: Binding -> Zfs -> Zfs -> App ()
-syncZfsSchemes bnd z1 z2 = do
-  exists1 <- checkDirectory bnd (z1 ^. zfsPath) False
-  exists2 <- checkDirectory bnd (z2 ^. zfsPath) True
-  if exists1 && exists2
-    then do
-      rev1 <- determineLastRev (env bnd) {exeRemote = Nothing} z1
-      rev2 <- determineLastRev (env bnd) z2
-      opts <- ask
-      let p = z1 ^. zfsPoolPath
-          r = toTextIgnore (z2 ^. zfsPoolPath)
-          msendArgs = case (rev1, rev2) of
-            (Just thisRev, Just thatRev) ->
-              if thisRev > thatRev
-                then Just $ sendTwoRevs opts p thatRev thisRev
-                else Nothing
-            (Just thisRev, Nothing) ->
-              Just $ sendRev opts p thisRev
-            (Nothing, _) ->
-              Just $ send (toTextIgnore p)
-          env'' = defaultExeEnv {exeMode = Sudo}
-
-      case msendArgs of
-        Nothing -> liftIO $ warn "Remote has newer snapshot revision"
-        Just (c, xs) ->
-          execute_ env'' c $ xs <> ["|", "zfs", "recv", "-F", r]
-    else
-      liftIO $
-        warn $
-          "Remote directory missing: "
-            <> toTextIgnore (z2 ^. zfsPath)
-  where
-    send pool = ("zfs", ["send", pool])
-
-    sendRev opts poolPath r1 =
-      ( "zfs",
-        ["send"]
-          <> ["-v" | verbose opts]
-          <> [toTextIgnore poolPath <> "@" <> tshow r1]
-      )
-
-    sendTwoRevs opts poolPath r1 r2 =
-      ( "zfs",
-        ["send"]
-          <> ["-v" | verbose opts]
-          <> [ "-I",
-               toTextIgnore poolPath <> "@" <> tshow r1,
-               toTextIgnore poolPath <> "@" <> tshow r2
-             ]
-      )
-
-determineLastRev :: ExeEnv -> Zfs -> App (Maybe Int)
-determineLastRev env' zfs = do
-  let p = toTextIgnore $ (zfs ^. zfsPath) </> ".zfs" </> "snapshot"
-  fmap lastMay $
-    sort
-      . map (read . unpack)
-      . filter (T.all isDigit)
-      . T.lines
-      <$> execute env' "ls" ["-1", p]
-
-syncUsingRsync :: Binding -> Store -> Store -> App ()
-syncUsingRsync bnd s1 s2 = do
+syncStores :: Binding -> Rsync -> Rsync -> App ()
+syncStores bnd s1 s2 = do
   exists1 <- checkDirectory bnd l False
   exists2 <- checkDirectory bnd r True
   if exists1 && exists2
     then
       rsync
         bnd
-        (fromMaybe (defaultRsync l) (s1 ^? rsyncScheme))
+        s1
         l
-        (fromMaybe (defaultRsync r) (s2 ^? rsyncScheme))
+        s2
         ( case h of
             Nothing -> toTextIgnore r
             Just targ -> targ <> ":" <> toTextIgnore r
         )
-    else do
-      liftIO $ warn $ "Either local directory missing: " <> toTextIgnore l
-      liftIO $ warn $ "OR remote directory missing: " <> toTextIgnore r
+    else liftIO $ do
+      warn $ "Either local directory missing: " <> toTextIgnore l
+      warn $ "OR remote directory missing: " <> toTextIgnore r
   where
     h = case targetHost bnd of
       Nothing -> Nothing
       Just targ
-        | Just (Just n) <- s2 ^? rsyncScheme . rsyncName -> Just n
+        | Just n <- s2 ^. rsyncName -> Just n
         | otherwise -> Just (targ ^. hostName)
 
-    Just (asDirectory -> l) = getStorePath bnd s1 False
-    Just (asDirectory -> r) = getStorePath bnd s2 True
+    (asDirectory -> l) = getStorePath bnd s1 False
+    (asDirectory -> r) = getStorePath bnd s2 True
 
 rsync :: Binding -> Rsync -> FilePath -> Rsync -> Text -> App ()
 rsync bnd srcRsync src destRsync dest =
@@ -998,5 +757,3 @@ humanReadable den x =
                   ("%." ++ show (min 3 (pred n)) ++ "f" ++ s)
                   (fromIntegral x / (fromIntegral den ^ n :: Double))
     f _ _ = Nothing
-
--- Main.hs (pushme) ends here
