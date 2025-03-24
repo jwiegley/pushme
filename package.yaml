@@ -10,6 +10,11 @@ license:    BSD3
 description:
   Script I use for synchronizing data among machines.
 
+ghc-options:
+  - -Wall
+  - -Wno-missing-home-modules
+  - -fprof-auto
+
 dependencies:
   - base                 >= 4.7
   - aeson
@@ -24,6 +29,7 @@ dependencies:
   - old-locale           >= 1.0
   - optparse-applicative >= 0.10
   - parallel-io          >= 0.3
+  - pretty-show          >= 1.10
   - process              >= 1.6
   - regex-posix          >= 0.95
   - system-fileio        >= 0.3

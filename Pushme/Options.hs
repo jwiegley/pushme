@@ -1,11 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Pushme.Options where
 
+import Control.Logging
+import Data.Aeson hiding (Options)
 import Data.Data (Data)
-import Data.Monoid
+import Data.Maybe (fromMaybe)
 import Data.Typeable (Typeable)
-import Options.Applicative hiding (Success, (&))
+import Options.Applicative hiding (Success)
 
 version :: String
 version = "2.0.0.1"
@@ -18,62 +21,88 @@ pushmeSummary =
   "pushme " ++ version ++ ", (C) " ++ copyright ++ " John Wiegley"
 
 data Options = Options
-  { jobs :: Int,
+  { jobs :: Maybe Int,
     dryRun :: Bool,
-    noSync :: Bool,
-    copyAll :: Bool,
-    dump :: Bool,
-    ssh :: String,
-    rsyncOpt :: String,
+    ssh :: Maybe String,
+    rsyncOpt :: Maybe String,
+    includeFrom :: Maybe FilePath,
     checksum :: Bool,
     fromName :: String,
-    configDir :: String,
-    filesets :: String,
-    classes :: String,
+    filesets :: Maybe String,
+    classes :: Maybe String,
     siUnits :: Bool,
     verbose :: Bool,
-    quiet :: Bool,
     cliArgs :: [String]
   }
   deriving (Data, Typeable, Show, Eq)
 
+instance FromJSON Options where
+  parseJSON (Object v) =
+    Options
+      <$> v .:? "jobs"
+      <*> (fromMaybe False <$> v .:? "dryRun")
+      <*> v .:? "ssh"
+      <*> v .:? "rsyncOpt"
+      <*> v .:? "includeFrom"
+      <*> (fromMaybe False <$> v .:? "checksum")
+      <*> (fromMaybe "" <$> v .:? "fromName")
+      <*> v .:? "filesets"
+      <*> v .:? "classes"
+      <*> (fromMaybe False <$> v .:? "siUnits")
+      <*> (fromMaybe False <$> v .:? "verbose")
+      <*> (fromMaybe [] <$> v .:? "cliArgs")
+  parseJSON _ = errorL "Error parsing Options"
+
+instance Semigroup Options where
+  Options a1 b1 c1 d1 e1 f1 g1 h1 i1 j1 k1 l1
+    <> Options a2 b2 c2 d2 e2 f2 g2 h2 i2 j2 k2 l2 =
+      Options
+        (a1 <|> a2)
+        (b1 || b2)
+        (c1 <|> c2)
+        (d1 <|> d2)
+        (e1 <|> e2)
+        (f1 || f2)
+        (g1 <|> g2)
+        (h1 <|> h2)
+        (i1 <|> i2)
+        (j1 || j2)
+        (k1 || k2)
+        (l1 <|> l2)
+
 pushmeOpts :: Parser Options
 pushmeOpts =
   Options
-    <$> option
-      auto
-      ( short 'j'
-          <> long "jobs"
-          <> value 1
-          <> help "Run INT concurrent finds at once (default: 1)"
+    <$> optional
+      ( option
+          auto
+          ( short 'j'
+              <> long "jobs"
+              <> help "Run INT concurrent finds at once"
+          )
       )
     <*> switch
       ( short 'n'
           <> long "dry-run"
           <> help "Don't take any actions"
       )
-    <*> switch
-      ( short 'N'
-          <> long "no-sync"
-          <> help "Don't even attempt a dry-run sync"
+    <*> optional
+      ( strOption
+          ( long "ssh"
+              <> help "Use a specific ssh command"
+          )
       )
-    <*> switch
-      ( long "copy-all"
-          <> help "For git-annex directories, copy all files"
+    <*> optional
+      ( strOption
+          ( long "rsync"
+              <> help "Use a specific rsync command"
+          )
       )
-    <*> switch
-      ( long "dump"
-          <> help "Show all the stores that would be synced"
-      )
-    <*> strOption
-      ( long "ssh"
-          <> value ""
-          <> help "Use a specific ssh command"
-      )
-    <*> strOption
-      ( long "rsync"
-          <> value ""
-          <> help "Use a specific rsync command"
+    <*> optional
+      ( strOption
+          ( long "include-from"
+              <> help "Use a specific rsync command"
+          )
       )
     <*> switch
       ( long "checksum"
@@ -81,25 +110,21 @@ pushmeOpts =
       )
     <*> strOption
       ( long "from"
-          <> value ""
-          <> help "Provide the name of the current host"
+          <> help "Name of the current (sending) host"
       )
-    <*> strOption
-      ( long "config"
-          <> value "~/.pushme"
-          <> help "Directory containing configuration files (def: ~/.pushme)"
+    <*> optional
+      ( strOption
+          ( short 'f'
+              <> long "filesets"
+              <> help "Synchronize the given fileset(s) (comma-sep)"
+          )
       )
-    <*> strOption
-      ( short 'f'
-          <> long "filesets"
-          <> value ""
-          <> help "Synchronize the given fileset(s) (comma-sep)"
-      )
-    <*> strOption
-      ( short 'c'
-          <> long "classes"
-          <> value ""
-          <> help "Filesets classes to synchronize (comma-sep)"
+    <*> optional
+      ( strOption
+          ( short 'c'
+              <> long "classes"
+              <> help "Filesets classes to synchronize (comma-sep)"
+          )
       )
     <*> switch
       ( long "si"
@@ -110,18 +135,13 @@ pushmeOpts =
           <> long "verbose"
           <> help "Report progress verbosely"
       )
-    <*> switch
-      ( short 'q'
-          <> long "quiet"
-          <> help "Be a little quieter"
-      )
     <*> many (argument (eitherReader Right) (metavar "ARGS"))
 
--- <*> many (argument Just (metavar "ARGS"))
-
+optionsDefinition :: ParserInfo Options
 optionsDefinition =
   info
     (helper <*> pushmeOpts)
     (fullDesc <> progDesc "" <> header pushmeSummary)
 
+getOptions :: IO Options
 getOptions = execParser optionsDefinition
