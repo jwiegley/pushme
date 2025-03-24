@@ -41,7 +41,8 @@ import Pushme.Options (Options (..), getOptions)
 import System.Directory
 import System.Exit
 import System.FilePath.Posix
-import System.IO.Temp
+import System.IO (hClose)
+import System.IO.Temp (withSystemTempFile)
 import System.Process hiding (env)
 import Text.Printf (printf)
 import Text.Regex.Posix ((=~))
@@ -252,18 +253,15 @@ relevantBindings opts thisHost fsets =
         cls = pack (fromMaybe "" (classes opts))
 
     createBinding :: Fileset -> Text -> Text -> Maybe Binding
-    createBinding fs hereRaw thereRaw = do
-      let atsign = T.head thereRaw == '@'
-          f
-            | atsign = second T.tail
-            | "/" `T.isInfixOf` thereRaw =
-                let [b, e] = T.splitOn "/" thereRaw
-                 in const (b, e)
-            | otherwise = id
-          (here, there) = f (hereRaw, thereRaw)
-      Binding fs here there
-        <$> fs ^. stores . at here
-        <*> fs ^. stores . at there
+    createBinding fs here there = do
+      srcRsync <- fs ^. stores . at here
+      destRsync <- fs ^. stores . at there
+      if maybe
+        False
+        (not . (here `elem`))
+        (destRsync ^. rsyncReceiveFrom)
+        then mzero
+        else pure $ Binding fs here there srcRsync destRsync
 
 applyBinding :: Options -> Binding -> IO ()
 applyBinding opts bnd = runReaderT go opts
@@ -318,76 +316,58 @@ syncStores bnd s1 s2 = do
     (asDirectory -> r) = s2 ^. rsyncPath
 
 rsync :: Binding -> Rsync -> FilePath -> Rsync -> Text -> App ()
-rsync bnd srcRsync src destRsync dest =
-  if maybe
-    False
-    (not . (bnd ^. source `elem`))
-    (destRsync ^. rsyncReceiveFrom)
-    then do
-      opts <- ask
-      unless (verbose opts) $
-        liftIO $
-          log' $
-            (fs ^. fsName)
-              <> ": \ESC[34mSkipped: "
-              <> ( if maybe
-                     False
-                     (not . (bnd ^. source `elem`))
-                     (destRsync ^. rsyncReceiveFrom)
-                     then "! ReceiveFrom"
-                     else "Unknown"
-                 )
-              <> "\ESC[34m\ESC[0m"
-    else do
-      let go xs =
-            doRsync
-              (fs ^. fsName)
-              xs
-              RsyncOptions
-                { _roSource = pack src,
-                  _roDest = dest,
-                  _roNoLinks =
-                    fromMaybe
-                      False
-                      ( (||)
-                          <$> srcRsync ^. rsyncNoLinks
-                          <*> destRsync ^. rsyncNoLinks
-                      ),
-                  _roPreserveAttrs =
-                    fromMaybe
-                      False
-                      ( (&&)
-                          <$> srcRsync ^. rsyncPreserveAttrs
-                          <*> destRsync ^. rsyncPreserveAttrs
-                      ),
-                  _roDeleteExcluded =
-                    fromMaybe
-                      False
-                      ( destRsync ^. rsyncDeleteExcluded
-                      )
-                }
-          rfs =
-            fromMaybe
-              []
-              ( destRsync ^. rsyncFilters
-                  <|> srcRsync ^. rsyncFilters
-              )
-      case rfs of
-        [] -> go []
-        filters -> withSystemTempFile "filters" $ \fpath h -> do
-          liftIO $ T.hPutStr h (T.unlines filters)
+rsync bnd srcRsync src destRsync dest = do
+  let go xs =
+        doRsync
+          (fs ^. fsName)
+          xs
+          RsyncOptions
+            { _roSource = pack src,
+              _roDest = dest,
+              _roNoLinks =
+                fromMaybe
+                  False
+                  ( (||)
+                      <$> srcRsync ^. rsyncNoLinks
+                      <*> destRsync ^. rsyncNoLinks
+                  ),
+              _roPreserveAttrs =
+                fromMaybe
+                  False
+                  ( (&&)
+                      <$> srcRsync ^. rsyncPreserveAttrs
+                      <*> destRsync ^. rsyncPreserveAttrs
+                  ),
+              _roDeleteExcluded =
+                fromMaybe
+                  False
+                  ( destRsync ^. rsyncDeleteExcluded
+                  )
+            }
+      rfs =
+        fromMaybe
+          []
+          ( destRsync ^. rsyncFilters
+              <|> srcRsync ^. rsyncFilters
+          )
+  case rfs of
+    [] -> go []
+    filters -> withSystemTempFile "filters" $ \fpath h -> do
+      liftIO $ do
+        T.hPutStr h (T.unlines filters)
+        hClose h
 
-          opts <- ask
-          when (verbose opts) $
-            liftIO $
-              debug' $
-                "INCLUDE FROM:\n" <> T.unlines filters
-          incl <- case includeFrom opts of
-            Just path -> (: []) . pack <$> liftIO (expandPath path)
-            Nothing -> pure []
-          go $
-            "--include-from=" <> pack fpath
-              : ["--include-from=" <> path | path <- incl]
+      opts <- ask
+      when (verbose opts) $
+        liftIO $
+          debug' $
+            "INCLUDE FROM:\n" <> T.unlines filters
+      incl <- case includeFrom opts of
+        Just path -> (: []) . pack <$> liftIO (expandPath path)
+        Nothing -> pure []
+      go $
+        "--include-from=" <> pack fpath
+          : ["--include-from=" <> path | path <- incl]
   where
     fs = bnd ^. fileset
 
