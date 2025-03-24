@@ -221,29 +221,28 @@ readYaml p = do
     Just d' -> return d'
 
 processBindings :: Options -> IO ()
-processBindings opts = do
-  let here = pack (fromName opts)
-  when (T.null here) $
-    errorL "Please identify the current host using --from"
-
-  fsets <- readFilesets
-  parallel_ $
-    map (applyBinding opts) $
-      relevantBindings opts here fsets
+processBindings opts = case cliArgs opts of
+  here : hosts@(_ : _) -> do
+    fsets <- readFilesets
+    parallel_ $
+      map (applyBinding opts) $
+        relevantBindings opts (pack here) fsets (map pack hosts)
+  _ -> errorL $ "Usage: pushme FROM TO..."
 
 relevantBindings ::
   Options ->
   Text ->
   Map Text Fileset ->
+  [Text] ->
   [Binding]
-relevantBindings opts thisHost fsets =
+relevantBindings opts thisHost fsets hosts =
   sortBy (comparing (^. fileset . fsPriority))
     . filter isMatching
     . catMaybes
     $ createBinding
       <$> M.elems fsets
       <*> pure thisHost
-      <*> map pack (cliArgs opts)
+      <*> hosts -- uses the list monad
   where
     isMatching bnd =
       (T.null fss || matchText fss (fs ^. fsName))

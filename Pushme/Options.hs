@@ -27,7 +27,6 @@ data Options = Options
     rsyncOpt :: Maybe String,
     includeFrom :: Maybe FilePath,
     checksum :: Bool,
-    fromName :: String,
     filesets :: Maybe String,
     classes :: Maybe String,
     siUnits :: Bool,
@@ -45,7 +44,6 @@ instance FromJSON Options where
       <*> v .:? "rsyncOpt"
       <*> v .:? "includeFrom"
       <*> (fromMaybe False <$> v .:? "checksum")
-      <*> (fromMaybe "" <$> v .:? "fromName")
       <*> v .:? "filesets"
       <*> v .:? "classes"
       <*> (fromMaybe False <$> v .:? "siUnits")
@@ -54,8 +52,8 @@ instance FromJSON Options where
   parseJSON _ = errorL "Error parsing Options"
 
 instance Semigroup Options where
-  Options a1 b1 c1 d1 e1 f1 g1 h1 i1 j1 k1 l1
-    <> Options a2 b2 c2 d2 e2 f2 g2 h2 i2 j2 k2 l2 =
+  Options a1 b1 c1 d1 e1 f1 h1 i1 j1 k1 l1
+    <> Options a2 b2 c2 d2 e2 f2 h2 i2 j2 k2 l2 =
       Options
         (a1 <|> a2)
         (b1 || b2)
@@ -63,7 +61,6 @@ instance Semigroup Options where
         (d1 <|> d2)
         (e1 <|> e2)
         (f1 || f2)
-        (g1 <|> g2)
         (h1 <|> h2)
         (i1 <|> i2)
         (j1 || j2)
@@ -107,10 +104,6 @@ pushmeOpts =
     <*> switch
       ( long "checksum"
           <> help "Pass --checksum flag to rsync"
-      )
-    <*> strOption
-      ( long "from"
-          <> help "Name of the current (sending) host"
       )
     <*> optional
       ( strOption
