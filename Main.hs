@@ -35,6 +35,7 @@ import Data.Ord (comparing)
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import Data.Time
 import Data.Yaml (decodeThrow)
 import GHC.Conc (setNumCapabilities)
 import Pushme.Options (Options (..), getOptions)
@@ -404,7 +405,7 @@ doRsync label options rsyncOpts = do
       analyze = not (verbose opts)
       env' = defaultExeEnv {exeDiscard = not analyze}
 
-  (ec, output) <- execute env' "rsync" args
+  (ec, diff, output) <- execute env' "rsync" args
   when (ec == ExitSuccess) $
     if analyze
       then do
@@ -425,15 +426,17 @@ doRsync label options rsyncOpts = do
         liftIO $
           log' $
             label
-              <> ": \ESC[34mSent \ESC[35m"
+              <> ": \ESC[36mSent \ESC[35m"
               <> humanReadable den (fromMaybe 0 xfer)
-              <> "\ESC[0m\ESC[34m in "
+              <> "\ESC[0m\ESC[36m in "
               <> commaSep (fromIntegral (fromMaybe 0 sent))
               <> " files\ESC[0m (out of "
               <> humanReadable den (fromMaybe 0 total)
               <> " in "
               <> commaSep (fromIntegral (fromMaybe 0 files))
-              <> ")"
+              <> ") \ESC[32m["
+              <> tshow (round diff :: Int)
+              <> "s]\ESC[0m"
       else liftIO $ T.putStr output
   where
     field :: Text -> M.Map Text Text -> Maybe Integer
@@ -451,7 +454,7 @@ doRsync label options rsyncOpts = do
           ("", 0)
         . tshow
 
-execute :: ExeEnv -> FilePath -> [Text] -> App (ExitCode, Text)
+execute :: ExeEnv -> FilePath -> [Text] -> App (ExitCode, NominalDiffTime, Text)
 execute ExeEnv {..} name args = do
   opts <- ask
   cmdName <-
@@ -479,7 +482,7 @@ execute ExeEnv {..} name args = do
                     <> ["\""],
               []
             )
-      runner p xs = readProcessWithExitCode p xs ""
+      runner p xs = timeFunction (readProcessWithExitCode p xs "")
       runner' p xs =
         ( case exeCwd of
             Just cwd
@@ -500,14 +503,14 @@ execute ExeEnv {..} name args = do
         <> T.intercalate
           " "
           (map tshow (map T.pack sshArgs ++ args''))
-  (ec, out, err) <-
+  (diff, (ec, out, err)) <-
     if dryRun opts
-      then return (ExitSuccess, "", "")
+      then return (0, (ExitSuccess, "", ""))
       else runner' n (map unpack args'')
   unless (ec == ExitSuccess) $
     errorL $
       "Error running command: " <> pack err
-  pure (ec, pack out)
+  pure (ec, diff, pack out)
   where
     findCmd n
       -- Assume commands with spaces in them are "known"
@@ -530,7 +533,9 @@ execute ExeEnv {..} name args = do
       )
 
 execute_ :: ExeEnv -> FilePath -> [Text] -> App ExitCode
-execute_ env' fp = fmap fst . execute env' {exeDiscard = True} fp
+execute_ env' fp args = do
+  (ec, _, _) <- execute env' {exeDiscard = True} fp args
+  pure ec
 
 expandPath :: FilePath -> IO FilePath
 expandPath ('~' : '/' : p) = (</> p) <$> getHomeDirectory
@@ -554,6 +559,13 @@ matchText x y = unpack x =~ unpack y
 
 tshow :: (Show a) => a -> Text
 tshow = pack . show
+
+timeFunction :: IO a -> IO (NominalDiffTime, a)
+timeFunction function = do
+  startTime <- getCurrentTime
+  a <- function
+  endTime <- getCurrentTime
+  pure (diffUTCTime endTime startTime, a)
 
 humanReadable :: Integer -> Integer -> Text
 humanReadable den x =
