@@ -30,7 +30,6 @@ import Data.Maybe
   ( catMaybes,
     fromJust,
     fromMaybe,
-    isNothing,
   )
 import Data.Ord (comparing)
 import Data.Text (Text, pack, unpack)
@@ -94,7 +93,7 @@ instance FromJSON Fileset where
         <*> v .:? "Class" .!= ""
         <*> v .:? "Priority" .!= 1000
         <*> v .:? "Stores" .!= mempty
-    opts <- v .:? "Options" .!= mempty
+    opts <- v .:? "Common" .!= mempty
     return $ M.foldrWithKey k fset (opts :: Map Text Value)
     where
       k :: Text -> Value -> Fileset -> Fileset
@@ -138,19 +137,7 @@ targetHost bnd
   | isLocal bnd = Nothing
   | otherwise = Just (bnd ^. target)
 
-data ExeEnv = ExeEnv
-  { exeRemote :: Maybe Host,
-    exeCwd :: Maybe FilePath,
-    exeDiscard :: Bool
-  }
-
 type App a = ReaderT Options IO a
-
-defaultExeEnv :: ExeEnv
-defaultExeEnv = ExeEnv Nothing Nothing False
-
-env :: Binding -> ExeEnv
-env bnd = ExeEnv (targetHost bnd) Nothing False
 
 main :: IO ()
 main = withStdoutLogging $ do
@@ -159,24 +146,20 @@ main = withStdoutLogging $ do
       <$> (readYaml =<< expandPath "~/.config/pushme/config.yaml")
       <*> getOptions
 
+  setLogLevel $ if verbose opts then LevelDebug else LevelInfo
+  setLogTimeFormat "%H:%M:%S"
+
+  when (dryRun opts) $
+    warn' "`--dryrun' specified, no changes will be made!"
   when (verbose opts) $
     debug' $
       pack (ppShow opts)
-  when (dryRun opts) $
-    warn' "`--dryrun' specified, no changes will be made!"
-
-  setLogLevel $ if verbose opts then LevelDebug else LevelInfo
-  setLogTimeFormat "%H:%M:%S"
 
   forM_ (jobs opts) GHC.Conc.setNumCapabilities
   processBindings opts `finally` stopGlobalPool
 
 directoryContents :: FilePath -> IO [FilePath]
-directoryContents topPath = do
-  names <- listDirectory topPath
-  let properNames =
-        filter (`notElem` [".", "..", ".DS_Store", ".localized"]) names
-  pure $ map (topPath </>) properNames
+directoryContents p = map (p </>) <$> listDirectory p
 
 readFilesets :: IO (Map Text Fileset)
 readFilesets = do
@@ -193,11 +176,10 @@ readFilesets = do
       liftIO . readYaml
 
 readYaml :: (FromJSON a) => FilePath -> IO a
-readYaml p = do
-  d <- decodeThrow <$> B.readFile p
-  case d of
+readYaml p =
+  decodeThrow <$> B.readFile p >>= \case
     Nothing -> errorL $ "Failed to read file " <> pack p
-    Just d' -> return d'
+    Just d -> return d
 
 processBindings :: Options -> IO ()
 processBindings opts = case cliArgs opts of
@@ -261,7 +243,7 @@ checkDirectory (isLocal -> True) path True =
   liftIO $ doesDirectoryExist path
 checkDirectory bnd path True =
   (ExitSuccess ==)
-    <$> execute_ (env bnd) "test" ["-d", escape (pack path)]
+    <$> execute_ (targetHost bnd) "test" ["-d", escape (pack path)]
 
 syncStores :: Binding -> Rsync -> Rsync -> App ()
 syncStores bnd s1 s2 = do
@@ -300,14 +282,12 @@ rsync bnd srcRsync src destRsync dest = do
           ( destRsync ^. rsyncFilters
               <|> srcRsync ^. rsyncFilters
           )
-
   case rfs of
     [] -> go args
     filters -> withSystemTempFile "filters" $ \fpath h -> do
       liftIO $ do
         T.hPutStr h (T.unlines filters)
         hClose h
-
       when (verbose opts) $
         liftIO $
           debug' $
@@ -361,13 +341,12 @@ rsyncArguments src dest preserveAttrs options = do
 doRsync :: Text -> [Text] -> App ()
 doRsync label args = do
   opts <- ask
-  let analyze = not (verbose opts)
-  (ec, diff, output) <-
-    execute (defaultExeEnv {exeDiscard = not analyze}) "rsync" args
+  (ec, diff, output) <- execute Nothing "rsync" args
   when (ec == ExitSuccess) $
     liftIO $
-      if analyze
-        then do
+      if verbose opts
+        then T.putStr output
+        else do
           let stats =
                 M.fromList
                   $ map
@@ -396,7 +375,6 @@ doRsync label args = do
               <> ") \ESC[32m["
               <> tshow (round diff :: Int)
               <> "s]\ESC[0m"
-        else T.putStr output
   where
     field :: Text -> M.Map Text Text -> Maybe Integer
     field x = fmap (read . unpack) . M.lookup x
@@ -413,43 +391,21 @@ doRsync label args = do
           ("", 0)
         . tshow
 
-execute :: ExeEnv -> FilePath -> [Text] -> App (ExitCode, NominalDiffTime, Text)
-execute ExeEnv {..} name args = do
+execute ::
+  Maybe Host ->
+  FilePath ->
+  [Text] ->
+  App (ExitCode, NominalDiffTime, Text)
+execute mhost name args = do
   opts <- ask
   cmdName <- liftIO $ findCmd name
-  let (name', args') = (cmdName, args)
-
-      (modifier, name'', args'') = case exeRemote of
-        Nothing -> (id, name', args')
-        Just h -> remote opts h $ case exeCwd of
-          Nothing -> (id, name', args')
-          Just cwd ->
-            ( id, -- jww (2025-03-23): Was `escaping False`
-              unpack $
-                T.concat $
-                  [ "\"cd ",
-                    escape (pack cwd),
-                    "; ",
-                    escape (pack name'),
-                    " "
-                  ]
-                    <> intersperse " " (map escape args')
-                    <> ["\""],
-              []
-            )
-      runner p xs = timeFunction (readProcessWithExitCode p xs "")
-      runner' p xs =
-        ( case exeCwd of
-            Just cwd
-              | isNothing exeRemote -> \action -> liftIO $ do
-                  cur <- getCurrentDirectory
-                  (setCurrentDirectory cwd >> runReaderT action opts)
-                    `finally` setCurrentDirectory cur
-            _ -> id
-        )
-          $ modifier
-          $ liftIO (runner p xs)
-  let (sshCmd : sshArgs) = words name''
+  let (name', args') = case mhost of
+        Nothing -> (cmdName, args)
+        Just h -> remote opts h (cmdName, args)
+      runner p xs =
+        liftIO $
+          timeFunction (readProcessWithExitCode p xs "")
+  let (sshCmd : sshArgs) = words name'
   n <- liftIO $ findCmd sshCmd
   liftIO $
     debug' $
@@ -457,11 +413,11 @@ execute ExeEnv {..} name args = do
         <> " "
         <> T.intercalate
           " "
-          (map tshow (map T.pack sshArgs ++ args''))
+          (map tshow (map T.pack sshArgs ++ args'))
   (diff, (ec, out, err)) <-
     if dryRun opts
       then return (0, (ExitSuccess, "", ""))
-      else runner' n (map unpack args'')
+      else runner n (map unpack args')
   unless (ec == ExitSuccess) $
     errorL $
       "Error running command: " <> pack err
@@ -476,20 +432,15 @@ execute ExeEnv {..} name args = do
             Just c' -> return c'
       | otherwise = return n
 
-    remote ::
-      Options ->
-      Host ->
-      (App a -> App a, FilePath, [Text]) ->
-      (App a -> App a, FilePath, [Text])
-    remote opts host (m, p, xs) =
-      ( m,
-        fromMaybe "ssh" (ssh opts),
+    remote :: Options -> Host -> (FilePath, [Text]) -> (FilePath, [Text])
+    remote opts host (p, xs) =
+      ( fromMaybe "ssh" (ssh opts),
         host : pack p : xs
       )
 
-execute_ :: ExeEnv -> FilePath -> [Text] -> App ExitCode
-execute_ env' fp args = do
-  (ec, _, _) <- execute env' {exeDiscard = True} fp args
+execute_ :: Maybe Host -> FilePath -> [Text] -> App ExitCode
+execute_ mhost fp args = do
+  (ec, _, _) <- execute mhost fp args
   pure ec
 
 expandPath :: FilePath -> IO FilePath
