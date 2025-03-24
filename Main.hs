@@ -342,7 +342,7 @@ doRsync :: Text -> [Text] -> App ()
 doRsync label args = do
   opts <- ask
   (ec, diff, output) <- execute Nothing "rsync" args
-  when (ec == ExitSuccess) $
+  when (ec == ExitSuccess && not (dryRun opts)) $
     liftIO $
       if verbose opts
         then T.putStr output
