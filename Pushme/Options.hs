@@ -24,7 +24,6 @@ data Options = Options
   { jobs :: Maybe Int,
     dryRun :: Bool,
     ssh :: Maybe String,
-    rsyncOpt :: Maybe String,
     includeFrom :: Maybe FilePath,
     checksum :: Bool,
     filesets :: Maybe String,
@@ -41,7 +40,6 @@ instance FromJSON Options where
       <$> v .:? "jobs"
       <*> (fromMaybe False <$> v .:? "dryRun")
       <*> v .:? "ssh"
-      <*> v .:? "rsyncOpt"
       <*> v .:? "includeFrom"
       <*> (fromMaybe False <$> v .:? "checksum")
       <*> v .:? "filesets"
@@ -52,13 +50,12 @@ instance FromJSON Options where
   parseJSON _ = errorL "Error parsing Options"
 
 instance Semigroup Options where
-  Options a1 b1 c1 d1 e1 f1 h1 i1 j1 k1 l1
-    <> Options a2 b2 c2 d2 e2 f2 h2 i2 j2 k2 l2 =
+  Options a1 b1 c1 e1 f1 h1 i1 j1 k1 l1
+    <> Options a2 b2 c2 e2 f2 h2 i2 j2 k2 l2 =
       Options
         (a1 <|> a2)
         (b1 || b2)
         (c1 <|> c2)
-        (d1 <|> d2)
         (e1 <|> e2)
         (f1 || f2)
         (h1 <|> h2)
@@ -87,12 +84,6 @@ pushmeOpts =
       ( strOption
           ( long "ssh"
               <> help "Use a specific ssh command"
-          )
-      )
-    <*> optional
-      ( strOption
-          ( long "rsync"
-              <> help "Use a specific rsync command"
           )
       )
     <*> optional
