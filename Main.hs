@@ -12,7 +12,7 @@
 module Main where
 
 import Control.Applicative ((<|>))
-import Control.Arrow (first)
+import Control.Arrow ((&&&))
 import Control.Concurrent.ParallelIO (parallel_, stopGlobalPool)
 import Control.Concurrent.QSem (newQSem, signalQSem, waitQSem)
 import Control.Exception (bracket_, finally)
@@ -22,7 +22,6 @@ import Control.Monad (guard, unless, when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
 import Data.Aeson hiding (Options)
-import qualified Data.ByteString as B (readFile)
 import Data.Function (on)
 import Data.List (sortOn)
 import Data.Map (Map)
@@ -37,7 +36,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
 import Data.Traversable (forM)
-import Data.Yaml (decodeThrow)
+import Data.Yaml (decodeFileEither)
 import Pushme.Options (Options (..), getOptions)
 import System.Directory
   ( doesDirectoryExist,
@@ -79,7 +78,7 @@ data Fileset = Fileset
   { _fsName :: Text,
     _fsClass :: Text,
     _fsPriority :: Int,
-    _stores :: Map Text Rsync
+    _fsStores :: Map Text Rsync
   }
   deriving (Show, Eq)
 
@@ -97,28 +96,27 @@ instance FromJSON Fileset where
         <$> v .: "Name"
         <*> v .:? "Class" .!= ""
         <*> v .:? "Priority" .!= 1000
-        <*> v .:? "Stores" .!= mempty
-    opts <- v .:? "Common" .!= mempty
-    pure $ M.foldrWithKey k fset (opts :: Map Text Value)
+        <*> v .: "Stores"
+    M.foldrWithKey k fset <$> v .:? "Common" .!= M.empty
     where
       k :: Text -> Value -> Fileset -> Fileset
       k "Filters" xs fs' =
         fs'
-          & stores . traverse . rsyncFilters
+          & fsStores . traverse . rsyncFilters
             %~ \case Nothing -> Just (fromJSON' xs); x -> x
       k "PreserveAttrs" xs fs' =
         fs'
-          & stores . traverse . rsyncPreserveAttrs
+          & fsStores . traverse . rsyncPreserveAttrs
             %~ \case Nothing -> Just (fromJSON' xs); x -> x
       k "Options" xs fs' =
         fs'
-          & stores . traverse . rsyncOptions
+          & fsStores . traverse . rsyncOptions
             %~ \case Nothing -> Just (fromJSON' xs); x -> x
       k "ReceiveFrom" xs fs' =
         fs'
-          & stores . traverse . rsyncReceiveFrom
+          & fsStores . traverse . rsyncReceiveFrom
             %~ \case Nothing -> Just (fromJSON' xs); x -> x
-      k _ _ fs' = fs'
+      k key _ _ = errorL $ "Unexpected key: " <> key
   parseJSON _ = errorL "Error parsing Fileset"
 
 data Host = Host
@@ -188,16 +186,16 @@ readFilesets = do
         <> "using files named "
         <> pack configDir
         <> "conf.d/<name>.yaml"
-  fmap (M.fromList . map (first (^. fsName))) $ do
+  fmap (M.fromList . map ((^. fsName) &&& id)) $ do
     contents <- directoryContents confD
     forM (filter (\n -> takeExtension n == ".yaml") contents) $
       liftIO . readYaml
 
 readYaml :: (FromJSON a) => FilePath -> IO a
 readYaml p =
-  decodeThrow <$> B.readFile p >>= \case
-    Nothing -> errorL $ "Failed to read file " <> pack p
-    Just d -> pure d
+  decodeFileEither p >>= \case
+    Left err -> errorL $ pack p <> ": " <> tshow err
+    Right d -> pure d
 
 processBindings :: Options -> IO ()
 processBindings opts = case cliArgs opts of
@@ -261,8 +259,8 @@ relevantBindings opts here fsets hosts =
       fset <- M.elems fsets
       there <- hosts
       maybeToList $ do
-        src <- fset ^. stores . at (here ^. hostName)
-        dest <- fset ^. stores . at (there ^. hostName)
+        src <- fset ^. fsStores . at (here ^. hostName)
+        dest <- fset ^. fsStores . at (there ^. hostName)
         guard $
           not
             ( maybe

@@ -6,7 +6,6 @@ module Pushme.Options where
 import Control.Logging
 import Data.Aeson hiding (Options)
 import Data.Data (Data)
-import Data.Maybe (fromMaybe)
 import Data.Typeable (Typeable)
 import Options.Applicative hiding (Success)
 
@@ -36,15 +35,15 @@ data Options = Options
 instance FromJSON Options where
   parseJSON (Object v) =
     Options
-      <$> (fromMaybe False <$> v .:? "dryRun")
+      <$> v .:? "dryRun" .!= False
       <*> v .:? "ssh"
       <*> v .:? "includeFrom"
-      <*> (fromMaybe False <$> v .:? "checksum")
+      <*> v .:? "checksum" .!= False
       <*> v .:? "filesets"
       <*> v .:? "classes"
-      <*> (fromMaybe False <$> v .:? "siUnits")
-      <*> (fromMaybe False <$> v .:? "verbose")
-      <*> (fromMaybe [] <$> v .:? "cliArgs")
+      <*> v .:? "siUnits" .!= False
+      <*> v .:? "verbose" .!= False
+      <*> pure []
   parseJSON _ = errorL "Error parsing Options"
 
 instance Semigroup Options where
