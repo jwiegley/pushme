@@ -3,7 +3,8 @@ to directories on the same machine, externally connected drives, and to and
 between ZFS filesystems).
 
 Each "fileset" you wish to synchronize is defined in a YAML file within
-`~/.pushme/conf.d`, for example this recipe I use for synchronizing my
+`~/.config/pushme/filesets`, for example this recipe I use for synchronizing
+my
 
     Name:     'Desktop'
     Priority: 12

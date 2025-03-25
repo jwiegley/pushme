@@ -188,14 +188,14 @@ processBindings = do
 
     readFilesets :: Options -> IO (Map Text Fileset)
     readFilesets opts = do
-      confD <- expandPath (opts ^. optsConfigDir </> "conf.d")
+      confD <- expandPath (opts ^. optsConfigDir </> "filesets")
       exists <- doesDirectoryExist confD
       unless exists $
         errorL $
           "Please define filesets, "
             <> "using files named "
             <> pack (opts ^. optsConfigDir)
-            <> "conf.d/<name>.yaml"
+            <> "filesets/<name>.yaml"
       directoryContents confD
         >>= mapM readYaml . filter (\n -> takeExtension n == ".yaml")
         <&> M.fromList . map ((^. filesetName) &&& id)
