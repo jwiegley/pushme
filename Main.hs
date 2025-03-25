@@ -14,6 +14,7 @@ module Main where
 import Control.Applicative
 import Control.Arrow
 import Control.Concurrent.ParallelIO (parallel_, stopGlobalPool)
+import Control.Concurrent.QSem (newQSem, signalQSem, waitQSem)
 import Control.Exception
 import Control.Lens
 import Control.Logging
@@ -27,9 +28,9 @@ import Data.List
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
-  ( catMaybes,
-    fromJust,
+  ( fromJust,
     fromMaybe,
+    maybeToList,
   )
 import Data.Ord (comparing)
 import Data.Text (Text, pack, unpack)
@@ -37,7 +38,6 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Time
 import Data.Yaml (decodeThrow)
-import GHC.Conc (setNumCapabilities)
 import Pushme.Options (Options (..), getOptions)
 import System.Directory
 import System.Exit
@@ -116,7 +116,20 @@ instance FromJSON Fileset where
       k _ _ fs' = fs'
   parseJSON _ = errorL "Error parsing Fileset"
 
-type Host = Text
+data Host = Host
+  { _hostName :: Text,
+    _hostMaxJobs :: Int
+  }
+  deriving (Show, Eq, Ord)
+
+makeLenses ''Host
+
+parseHost :: Text -> Host
+parseHost name =
+  case T.split (== '@') name of
+    [n] -> Host n 1
+    [n, j] -> Host n (read (unpack j))
+    _ -> errorL $ "Cannot parse hostname: " <> name
 
 data Binding = Binding
   { _fileset :: Fileset,
@@ -151,11 +164,8 @@ main = withStdoutLogging $ do
 
   when (dryRun opts) $
     warn' "`--dryrun' specified, no changes will be made!"
-  when (verbose opts) $
-    debug' $
-      pack (ppShow opts)
+  debug' $ pack (ppShow opts)
 
-  forM_ (jobs opts) GHC.Conc.setNumCapabilities
   processBindings opts `finally` stopGlobalPool
 
 directoryContents :: FilePath -> IO [FilePath]
@@ -183,23 +193,79 @@ readYaml p =
 
 processBindings :: Options -> IO ()
 processBindings opts = case cliArgs opts of
-  here : hosts@(_ : _) -> do
+  host : hosts@(_ : _) -> do
     fsets <- readFilesets
-    parallel_ $
-      map (`applyBinding` opts) $
-        relevantBindings opts (pack here) fsets (map pack hosts)
+    let here = parseHost (pack host)
+        bindings =
+          relevantBindings
+            opts
+            here
+            fsets
+            (map (parseHost . pack) hosts)
+    debug' $
+      "Local host "
+        <> here ^. hostName
+        <> " with "
+        <> tshow (here ^. hostMaxJobs)
+        <> " sending jobs"
+    hereSlots <- newQSem (here ^. hostMaxJobs)
+    thereSlotsAll <- forM (M.keys bindings) $ \there -> do
+      debug' $
+        "Remote host "
+          <> there ^. hostName
+          <> " with "
+          <> tshow (there ^. hostMaxJobs)
+          <> " receiving jobs"
+      newQSem (there ^. hostMaxJobs)
+    parallel_ $ do
+      (bnds, thereSlots) <- zip (M.elems bindings) thereSlotsAll
+      map (go hereSlots thereSlots) bnds
   _ -> errorL $ "Usage: pushme FROM TO..."
-
-relevantBindings :: Options -> Text -> Map Text Fileset -> [Text] -> [Binding]
-relevantBindings opts thisHost fsets hosts =
-  sortBy (comparing (^. fileset . fsPriority))
-    . filter isMatching
-    . catMaybes
-    $ createBinding
-      <$> M.elems fsets
-      <*> pure thisHost
-      <*> hosts -- uses the list monad
   where
+    go p q bnd =
+      bracket_ (waitQSem p) (signalQSem p) $
+        bracket_ (waitQSem q) (signalQSem q) $
+          applyBinding bnd opts
+
+collect :: (Ord b) => (a -> b) -> [a] -> Map b [a]
+collect f =
+  foldl'
+    ( \m x ->
+        m
+          & at (f x) %~ \case
+            Nothing -> Just [x]
+            Just xs -> Just (x : xs)
+    )
+    mempty
+
+relevantBindings ::
+  Options ->
+  Host ->
+  Map Text Fileset ->
+  [Host] ->
+  Map Host [Binding]
+relevantBindings opts here fsets hosts =
+  M.map
+    (sortBy (comparing (^. fileset . fsPriority)))
+    (collect (^. target) bindings)
+  where
+    bindings = do
+      fset <- M.elems fsets
+      there <- hosts
+      maybeToList $ do
+        src <- fset ^. stores . at (here ^. hostName)
+        dest <- fset ^. stores . at (there ^. hostName)
+        guard $
+          not
+            ( maybe
+                False
+                (not . (here ^. hostName `elem`))
+                (dest ^. rsyncReceiveFrom)
+            )
+        let binding = Binding fset here there src dest
+        guard $ isMatching binding
+        pure binding
+
     isMatching bnd =
       (T.null fss || matchText fss (fs ^. fsName))
         && (T.null cls || matchText cls (fs ^. fsClass))
@@ -207,19 +273,6 @@ relevantBindings opts thisHost fsets hosts =
         fs = bnd ^. fileset
         fss = pack (fromMaybe "" (filesets opts))
         cls = pack (fromMaybe "" (classes opts))
-
-    createBinding :: Fileset -> Text -> Text -> Maybe Binding
-    createBinding fs here there = do
-      srcRsync <- fs ^. stores . at here
-      destRsync <- fs ^. stores . at there
-      guard $
-        not
-          ( maybe
-              False
-              (not . (here `elem`))
-              (destRsync ^. rsyncReceiveFrom)
-          )
-      pure $ Binding fs here there srcRsync destRsync
 
 applyBinding :: Binding -> Options -> IO ()
 applyBinding bnd = runReaderT go
@@ -229,11 +282,11 @@ applyBinding bnd = runReaderT go
       liftIO $
         log' $
           "Sending "
-            <> (bnd ^. source)
+            <> (bnd ^. source . hostName)
             <> "/"
             <> (bnd ^. fileset . fsName)
             <> " -> "
-            <> (bnd ^. target)
+            <> (bnd ^. target . hostName)
       syncStores bnd (bnd ^. this) (bnd ^. that)
 
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
@@ -260,7 +313,7 @@ syncStores bnd s1 s2 = do
         s2
         ( case targetHost bnd of
             Nothing -> pack r
-            Just targ -> targ <> ":" <> pack r
+            Just targ -> targ ^. hostName <> ":" <> pack r
         )
     else liftIO $ do
       warn $ "Either local directory missing: " <> pack l
@@ -435,7 +488,7 @@ execute mhost name args = do
     remote :: Options -> Host -> (FilePath, [Text]) -> (FilePath, [Text])
     remote opts host (p, xs) =
       ( fromMaybe "ssh" (ssh opts),
-        host : pack p : xs
+        host ^. hostName : pack p : xs
       )
 
 execute_ :: Maybe Host -> FilePath -> [Text] -> App ExitCode

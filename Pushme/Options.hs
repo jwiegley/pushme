@@ -21,8 +21,7 @@ pushmeSummary =
   "pushme " ++ version ++ ", (C) " ++ copyright ++ " John Wiegley"
 
 data Options = Options
-  { jobs :: Maybe Int,
-    dryRun :: Bool,
+  { dryRun :: Bool,
     ssh :: Maybe String,
     includeFrom :: Maybe FilePath,
     checksum :: Bool,
@@ -37,8 +36,7 @@ data Options = Options
 instance FromJSON Options where
   parseJSON (Object v) =
     Options
-      <$> v .:? "jobs"
-      <*> (fromMaybe False <$> v .:? "dryRun")
+      <$> (fromMaybe False <$> v .:? "dryRun")
       <*> v .:? "ssh"
       <*> v .:? "includeFrom"
       <*> (fromMaybe False <$> v .:? "checksum")
@@ -50,10 +48,9 @@ instance FromJSON Options where
   parseJSON _ = errorL "Error parsing Options"
 
 instance Semigroup Options where
-  Options a1 b1 c1 e1 f1 h1 i1 j1 k1 l1
-    <> Options a2 b2 c2 e2 f2 h2 i2 j2 k2 l2 =
+  Options b1 c1 e1 f1 h1 i1 j1 k1 l1
+    <> Options b2 c2 e2 f2 h2 i2 j2 k2 l2 =
       Options
-        (a1 <|> a2)
         (b1 || b2)
         (c1 <|> c2)
         (e1 <|> e2)
@@ -67,15 +64,7 @@ instance Semigroup Options where
 pushmeOpts :: Parser Options
 pushmeOpts =
   Options
-    <$> optional
-      ( option
-          auto
-          ( short 'j'
-              <> long "jobs"
-              <> help "Run INT concurrent finds at once"
-          )
-      )
-    <*> switch
+    <$> switch
       ( short 'n'
           <> long "dry-run"
           <> help "Don't take any actions"

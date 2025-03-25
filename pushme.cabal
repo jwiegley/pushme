@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e50017dd822ab0fffd30ed682e5bddbad2d4c8faa29dd5d0681e2fc449a55ce6
+-- hash: 991e2968164566ca36242e0a3be7198391a59f9928586e16622e55d22fc7334d
 
 name:           pushme
 version:        3.0.0
@@ -29,7 +29,7 @@ executable pushme
   main-is: Main.hs
   other-modules:
       Pushme.Options
-  ghc-options: -Wall -Wno-missing-home-modules -fprof-auto -threaded
+  ghc-options: -Wall -Wno-missing-home-modules -fprof-auto -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
     , base >=4.7
