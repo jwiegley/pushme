@@ -99,7 +99,7 @@ instance FromJSON Fileset where
         <*> v .:? "Priority" .!= 1000
         <*> v .:? "Stores" .!= mempty
     opts <- v .:? "Common" .!= mempty
-    return $ M.foldrWithKey k fset (opts :: Map Text Value)
+    pure $ M.foldrWithKey k fset (opts :: Map Text Value)
     where
       k :: Text -> Value -> Fileset -> Fileset
       k "Filters" xs fs' =
@@ -130,11 +130,10 @@ data Host = Host
 makeLenses ''Host
 
 parseHost :: Text -> Host
-parseHost name =
-  case T.split (== '@') name of
-    [n] -> Host n 1
-    [n, j] -> Host n (read (unpack j))
-    _ -> errorL $ "Cannot parse hostname: " <> name
+parseHost name = case T.split (== '@') name of
+  [n] -> Host n 1
+  [n, j] -> Host n (read (unpack j))
+  _ -> errorL $ "Cannot parse hostname: " <> name
 
 data Binding = Binding
   { _fileset :: Fileset,
@@ -157,11 +156,14 @@ targetHost bnd
 
 type App a = ReaderT Options IO a
 
+configDir :: FilePath
+configDir = "~/.config/pushme"
+
 main :: IO ()
 main = withStdoutLogging $ do
   opts <-
     (<>)
-      <$> (readYaml =<< expandPath "~/.config/pushme/config.yaml")
+      <$> (readYaml =<< expandPath (configDir </> "config.yaml"))
       <*> getOptions
 
   setLogLevel $ if verbose opts then LevelDebug else LevelInfo
@@ -178,13 +180,14 @@ directoryContents p = map (p </>) <$> listDirectory p
 
 readFilesets :: IO (Map Text Fileset)
 readFilesets = do
-  confD <- expandPath "~/.config/pushme/conf.d"
+  confD <- expandPath (configDir </> "conf.d")
   exists <- doesDirectoryExist confD
   unless exists $
     errorL $
       "Please define filesets, "
         <> "using files named "
-        <> "~/.config/pushme/conf.d/<name>.yaml"
+        <> pack configDir
+        <> "conf.d/<name>.yaml"
   fmap (M.fromList . map (first (^. fsName))) $ do
     contents <- directoryContents confD
     forM (filter (\n -> takeExtension n == ".yaml") contents) $
@@ -194,7 +197,7 @@ readYaml :: (FromJSON a) => FilePath -> IO a
 readYaml p =
   decodeThrow <$> B.readFile p >>= \case
     Nothing -> errorL $ "Failed to read file " <> pack p
-    Just d -> return d
+    Just d -> pure d
 
 processBindings :: Options -> IO ()
 processBindings opts = case cliArgs opts of
@@ -284,14 +287,13 @@ applyBinding bnd = runReaderT go
   where
     go :: App ()
     go = do
-      liftIO $
-        log' $
-          "Sending "
-            <> (bnd ^. source . hostName)
-            <> "/"
-            <> (bnd ^. fileset . fsName)
-            <> " -> "
-            <> (bnd ^. target . hostName)
+      log' $
+        "Sending "
+          <> (bnd ^. source . hostName)
+          <> "/"
+          <> (bnd ^. fileset . fsName)
+          <> " -> "
+          <> (bnd ^. target . hostName)
       syncStores bnd (bnd ^. this) (bnd ^. that)
 
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
@@ -300,8 +302,14 @@ checkDirectory _ path False =
 checkDirectory (isLocal -> True) path True =
   liftIO $ doesDirectoryExist path
 checkDirectory bnd path True =
-  (ExitSuccess ==)
-    <$> execute_ (targetHost bnd) "test" ["-d", escape (pack path)]
+  (ExitSuccess ==) . fstOf3
+    <$> execute (targetHost bnd) "test" ["-d", escape (pack path)]
+  where
+    escape :: Text -> Text
+    escape x
+      | "\"" `T.isInfixOf` x || " " `T.isInfixOf` x =
+          "'" <> T.replace "\"" "\\\"" x <> "'"
+      | otherwise = x
 
 syncStores :: Binding -> Rsync -> Rsync -> App ()
 syncStores bnd s1 s2 = do
@@ -349,9 +357,8 @@ rsync bnd srcRsync src destRsync dest = do
         T.hPutStr h (T.unlines filters)
         hClose h
       when (verbose opts) $
-        liftIO $
-          debug' $
-            "INCLUDE FROM:\n" <> T.unlines filters
+        debug' $
+          "INCLUDE FROM:\n" <> T.unlines filters
       go ("--include-from=" <> pack fpath : args)
   where
     go xs = do
@@ -405,38 +412,37 @@ doRsync label args = do
   opts <- ask
   (ec, diff, output) <- execute Nothing "rsync" args
   when (ec == ExitSuccess && not (dryRun opts)) $
-    liftIO $
-      if verbose opts
-        then T.putStr output
-        else do
-          let stats =
-                M.fromList
-                  $ map
-                    ( fmap (T.filter (/= ',') . (!! 1) . T.words)
-                        . T.breakOn ": "
-                    )
-                  $ filter (": " `T.isInfixOf`)
-                  $ T.lines output
-              files = field "Number of files" stats
-              sent =
-                field "Number of regular files transferred" stats
-                  <|> field "Number of files transferred" stats
-              total = field "Total file size" stats
-              xfer = field "Total transferred file size" stats
-              den = (\x -> if x then 1000 else 1024) $ siUnits opts
-          log' $
-            label
-              <> ": \ESC[34mSent \ESC[35m"
-              <> humanReadable den (fromMaybe 0 xfer)
-              <> "\ESC[0m\ESC[34m in "
-              <> commaSep (fromIntegral (fromMaybe 0 sent))
-              <> " files\ESC[0m (out of "
-              <> humanReadable den (fromMaybe 0 total)
-              <> " in "
-              <> commaSep (fromIntegral (fromMaybe 0 files))
-              <> ") \ESC[32m["
-              <> tshow (round diff :: Int)
-              <> "s]\ESC[0m"
+    if verbose opts
+      then liftIO $ T.putStr output
+      else do
+        let stats =
+              M.fromList
+                $ map
+                  ( fmap (T.filter (/= ',') . (!! 1) . T.words)
+                      . T.breakOn ": "
+                  )
+                $ filter (": " `T.isInfixOf`)
+                $ T.lines output
+            files = field "Number of files" stats
+            sent =
+              field "Number of regular files transferred" stats
+                <|> field "Number of files transferred" stats
+            total = field "Total file size" stats
+            xfer = field "Total transferred file size" stats
+            den = (\x -> if x then 1000 else 1024) $ siUnits opts
+        log' $
+          label
+            <> ": \ESC[34mSent \ESC[35m"
+            <> humanReadable den (fromMaybe 0 xfer)
+            <> "\ESC[0m\ESC[34m in "
+            <> commaSep (fromIntegral (fromMaybe 0 sent))
+            <> " files\ESC[0m (out of "
+            <> humanReadable den (fromMaybe 0 total)
+            <> " in "
+            <> commaSep (fromIntegral (fromMaybe 0 files))
+            <> ") \ESC[32m["
+            <> tshow (round diff :: Int)
+            <> "s]\ESC[0m"
   where
     field :: Text -> M.Map Text Text -> Maybe Integer
     field x = fmap (read . unpack) . M.lookup x
@@ -452,6 +458,31 @@ doRsync label args = do
           )
           ("", 0)
         . tshow
+
+    humanReadable :: Integer -> Integer -> Text
+    humanReadable den x =
+      pack $
+        fromJust $
+          f 0 "b"
+            <|> f 1 "K"
+            <|> f 2 "M"
+            <|> f 3 "G"
+            <|> f 4 "T"
+            <|> f 5 "P"
+            <|> f 6 "X"
+            <|> Just (printf "%db" x)
+      where
+        f :: Integer -> String -> Maybe String
+        f n s
+          | x < (den ^ succ n) =
+              Just $
+                if n == 0
+                  then printf ("%d" ++ s) x
+                  else
+                    printf
+                      ("%." ++ show (min 3 (pred n)) ++ "f" ++ s)
+                      (fromIntegral x / (fromIntegral den ^ n :: Double))
+        f _ _ = Nothing
 
 execute ::
   Maybe Host ->
@@ -469,30 +500,37 @@ execute mhost name args = do
           timeFunction (readProcessWithExitCode p xs "")
   let (sshCmd : sshArgs) = words name'
   n <- liftIO $ findCmd sshCmd
-  liftIO $
-    debug' $
-      pack n
-        <> " "
-        <> T.intercalate
-          " "
-          (map tshow (map T.pack sshArgs ++ args'))
+  debug' $
+    pack n
+      <> " "
+      <> T.intercalate
+        " "
+        (map tshow (map T.pack sshArgs ++ args'))
   (diff, (ec, out, err)) <-
     if dryRun opts
-      then return (0, (ExitSuccess, "", ""))
+      then pure (0, (ExitSuccess, "", ""))
       else runner n (map unpack args')
   unless (ec == ExitSuccess) $
     errorL $
       "Error running command: " <> pack err
   pure (ec, diff, pack out)
   where
+    timeFunction :: IO a -> IO (NominalDiffTime, a)
+    timeFunction function = do
+      startTime <- getCurrentTime
+      a <- function
+      endTime <- getCurrentTime
+      pure (diffUTCTime endTime startTime, a)
+
+    findCmd :: FilePath -> IO FilePath
     findCmd n
       -- Assume commands with spaces in them are "known"
-      | " " `T.isInfixOf` pack n = return n
+      | " " `T.isInfixOf` pack n = pure n
       | isRelative n =
           findExecutable n >>= \case
             Nothing -> errorL $ "Failed to find command: " <> pack n
-            Just c' -> return c'
-      | otherwise = return n
+            Just c' -> pure c'
+      | otherwise = pure n
 
     remote :: Options -> Host -> (FilePath, [Text]) -> (FilePath, [Text])
     remote opts host (p, xs) =
@@ -500,14 +538,12 @@ execute mhost name args = do
         host ^. hostName : pack p : xs
       )
 
-execute_ :: Maybe Host -> FilePath -> [Text] -> App ExitCode
-execute_ mhost fp args = do
-  (ec, _, _) <- execute mhost fp args
-  pure ec
+fstOf3 :: (a, b, c) -> a
+fstOf3 (a, _, _) = a
 
 expandPath :: FilePath -> IO FilePath
 expandPath ('~' : '/' : p) = (</> p) <$> getHomeDirectory
-expandPath p = return p
+expandPath p = pure p
 
 asDirectory :: FilePath -> FilePath
 asDirectory (pack -> fp) =
@@ -516,46 +552,8 @@ asDirectory (pack -> fp) =
       then T.append fp "/"
       else fp
 
-escape :: Text -> Text
-escape x
-  | "\"" `T.isInfixOf` x || " " `T.isInfixOf` x =
-      "'" <> T.replace "\"" "\\\"" x <> "'"
-  | otherwise = x
-
 matchText :: Text -> Text -> Bool
 matchText = (=~) `on` unpack
 
 tshow :: (Show a) => a -> Text
 tshow = pack . show
-
-timeFunction :: IO a -> IO (NominalDiffTime, a)
-timeFunction function = do
-  startTime <- getCurrentTime
-  a <- function
-  endTime <- getCurrentTime
-  pure (diffUTCTime endTime startTime, a)
-
-humanReadable :: Integer -> Integer -> Text
-humanReadable den x =
-  pack $
-    fromJust $
-      f 0 "b"
-        <|> f 1 "K"
-        <|> f 2 "M"
-        <|> f 3 "G"
-        <|> f 4 "T"
-        <|> f 5 "P"
-        <|> f 6 "X"
-        <|> Just (printf "%db" x)
-  where
-    f :: Integer -> String -> Maybe String
-    f n s
-      | x < (den ^ succ n) =
-          Just $
-            if n == 0
-              then printf ("%d" ++ s) x
-              else
-                printf
-                  ("%." ++ show (min 3 (pred n)) ++ "f" ++ s)
-                  (fromIntegral x / (fromIntegral den ^ n :: Double))
-    f _ _ = Nothing
