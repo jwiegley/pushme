@@ -11,20 +11,20 @@
 
 module Main where
 
-import Control.Applicative
-import Control.Arrow
+import Control.Applicative ((<|>))
+import Control.Arrow (first)
 import Control.Concurrent.ParallelIO (parallel_, stopGlobalPool)
 import Control.Concurrent.QSem (newQSem, signalQSem, waitQSem)
-import Control.Exception
+import Control.Exception (bracket_, finally)
 import Control.Lens
 import Control.Logging
-import Control.Monad
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Reader
+import Control.Monad (guard, unless, when)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
 import Data.Aeson hiding (Options)
 import qualified Data.ByteString as B (readFile)
 import Data.Function (on)
-import Data.List
+import Data.List (sortOn)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
@@ -32,16 +32,21 @@ import Data.Maybe
     fromMaybe,
     maybeToList,
   )
-import Data.Ord (comparing)
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Data.Time
+import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
+import Data.Traversable (forM)
 import Data.Yaml (decodeThrow)
 import Pushme.Options (Options (..), getOptions)
 import System.Directory
-import System.Exit
-import System.FilePath.Posix
+  ( doesDirectoryExist,
+    findExecutable,
+    getHomeDirectory,
+    listDirectory,
+  )
+import System.Exit (ExitCode (..))
+import System.FilePath.Posix (isRelative, takeExtension, (</>))
 import System.IO (hClose)
 import System.IO.Temp (withSystemTempFile)
 import System.Process hiding (env)
@@ -180,7 +185,7 @@ readFilesets = do
       "Please define filesets, "
         <> "using files named "
         <> "~/.config/pushme/conf.d/<name>.yaml"
-  fmap (M.fromList . map ((^. fsName) &&& id)) $ do
+  fmap (M.fromList . map (first (^. fsName))) $ do
     contents <- directoryContents confD
     forM (filter (\n -> takeExtension n == ".yaml") contents) $
       liftIO . readYaml
@@ -246,7 +251,7 @@ relevantBindings ::
   Map Host [Binding]
 relevantBindings opts here fsets hosts =
   M.map
-    (sortBy (comparing (^. fileset . fsPriority)))
+    (sortOn (^. fileset . fsPriority))
     (collect (^. target) bindings)
   where
     bindings = do
@@ -332,8 +337,10 @@ rsync bnd srcRsync src destRsync dest = do
       rfs =
         fromMaybe
           []
-          ( destRsync ^. rsyncFilters
-              <|> srcRsync ^. rsyncFilters
+          ( destRsync
+              ^. rsyncFilters
+              <|> srcRsync
+                ^. rsyncFilters
           )
   case rfs of
     [] -> go args
@@ -362,8 +369,10 @@ rsync bnd srcRsync src destRsync dest = do
           ( xs
               ++ fromMaybe
                 []
-                ( srcRsync ^. rsyncOptions
-                    <|> destRsync ^. rsyncOptions
+                ( srcRsync
+                    ^. rsyncOptions
+                    <|> destRsync
+                      ^. rsyncOptions
                 )
           )
       doRsync (bnd ^. fileset . fsName) args
