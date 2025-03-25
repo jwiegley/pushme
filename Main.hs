@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
@@ -22,6 +23,7 @@ import Control.Monad (guard, unless, when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
 import Data.Aeson hiding (Options)
+import Data.Aeson.Types (Parser)
 import Data.Function (on)
 import Data.List (sortOn)
 import Data.Map (Map)
@@ -37,7 +39,7 @@ import qualified Data.Text.IO as T
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
 import Data.Traversable (forM)
 import Data.Yaml (decodeFileEither)
-import Pushme.Options (Options (..), getOptions)
+import Pushme.Options
 import System.Directory
   ( doesDirectoryExist,
     findExecutable,
@@ -53,70 +55,41 @@ import Text.Printf (printf)
 import Text.Regex.Posix ((=~))
 import Text.Show.Pretty (ppShow)
 
-data Rsync = Rsync
-  { _rsyncPath :: FilePath,
-    _rsyncFilters :: Maybe [Text],
-    _rsyncPreserveAttrs :: Maybe Bool,
-    _rsyncOptions :: Maybe [Text],
-    _rsyncReceiveFrom :: Maybe [Text]
-  }
-  deriving (Show, Eq)
-
-instance FromJSON Rsync where
-  parseJSON (Object v) =
-    Rsync
-      <$> v .: "Path"
-      <*> v .:? "Filters"
-      <*> v .:? "PreserveAttrs"
-      <*> v .:? "Options"
-      <*> v .:? "ReceiveFrom"
-  parseJSON _ = errorL "Error parsing Rsync"
-
-makeLenses ''Rsync
-
 data Fileset = Fileset
-  { _fsName :: Text,
-    _fsClass :: Text,
-    _fsPriority :: Int,
-    _fsStores :: Map Text Rsync
+  { _filesetName :: Text,
+    _filesetClasses :: Maybe [Text],
+    _filesetPriority :: Int,
+    _filesetStores :: Map Text (FilePath, RsyncOptions),
+    _filesetCommon :: Maybe RsyncOptions
   }
   deriving (Show, Eq)
 
 makeLenses ''Fileset
 
-fromJSON' :: (FromJSON a) => Value -> a
-fromJSON' a = case fromJSON a of
-  Error e -> errorL (pack e)
-  Success x -> x
+decodeEnrichedOptions :: Map Text Value -> Parser (FilePath, RsyncOptions)
+decodeEnrichedOptions m =
+  parseM (m ^. at "Path") >>= \case
+    Nothing -> errorL "Missing value for Path"
+    Just path ->
+      (path,)
+        <$> ( RsyncOptions
+                <$> parseM (m ^. at "Filters")
+                <*> parseM (m ^. at "PreserveAttrs")
+                <*> parseM (m ^. at "Options")
+                <*> parseM (m ^. at "ReceiveFrom")
+            )
+  where
+    parseM :: (FromJSON a) => Maybe Value -> Parser (Maybe a)
+    parseM = traverse parseJSON
 
 instance FromJSON Fileset where
-  parseJSON (Object v) = do
-    fset <-
-      Fileset
-        <$> v .: "Name"
-        <*> v .:? "Class" .!= ""
-        <*> v .:? "Priority" .!= 1000
-        <*> v .: "Stores"
-    M.foldrWithKey k fset <$> v .:? "Common" .!= M.empty
-    where
-      k :: Text -> Value -> Fileset -> Fileset
-      k "Filters" xs fs' =
-        fs'
-          & fsStores . traverse . rsyncFilters
-            %~ \case Nothing -> Just (fromJSON' xs); x -> x
-      k "PreserveAttrs" xs fs' =
-        fs'
-          & fsStores . traverse . rsyncPreserveAttrs
-            %~ \case Nothing -> Just (fromJSON' xs); x -> x
-      k "Options" xs fs' =
-        fs'
-          & fsStores . traverse . rsyncOptions
-            %~ \case Nothing -> Just (fromJSON' xs); x -> x
-      k "ReceiveFrom" xs fs' =
-        fs'
-          & fsStores . traverse . rsyncReceiveFrom
-            %~ \case Nothing -> Just (fromJSON' xs); x -> x
-      k key _ _ = errorL $ "Unexpected key: " <> key
+  parseJSON (Object v) =
+    Fileset
+      <$> v .: "Name"
+      <*> v .:? "Classes"
+      <*> v .:? "Priority" .!= 1000
+      <*> (v .: "Stores" >>= traverse decodeEnrichedOptions)
+      <*> v .:? "Common"
   parseJSON _ = errorL "Error parsing Fileset"
 
 data Host = Host
@@ -134,165 +107,164 @@ parseHost name = case T.split (== '@') name of
   _ -> errorL $ "Cannot parse hostname: " <> name
 
 data Binding = Binding
-  { _fileset :: Fileset,
-    _source :: Host,
-    _target :: Host,
-    _this :: Rsync,
-    _that :: Rsync
+  { _bindingFileset :: Fileset,
+    _bindingSourceHost :: Host,
+    _bindingSourcePath :: FilePath,
+    _bindingTargetHost :: Host,
+    _bindingTargetPath :: FilePath,
+    _bindingRsyncOpts :: RsyncOptions
   }
   deriving (Show, Eq)
 
 makeLenses ''Binding
 
 isLocal :: Binding -> Bool
-isLocal bnd = bnd ^. source == bnd ^. target
+isLocal bnd = bnd ^. bindingSourceHost == bnd ^. bindingTargetHost
 
-targetHost :: Binding -> Maybe Host
-targetHost bnd
+remoteHost :: Binding -> Maybe Host
+remoteHost bnd
   | isLocal bnd = Nothing
-  | otherwise = Just (bnd ^. target)
+  | otherwise = Just (bnd ^. bindingTargetHost)
 
 type App a = ReaderT Options IO a
 
-configDir :: FilePath
-configDir = "~/.config/pushme"
-
 main :: IO ()
-main = withStdoutLogging $ do
-  opts <-
-    (<>)
-      <$> (readYaml =<< expandPath (configDir </> "config.yaml"))
-      <*> getOptions
+main = withStdoutLogging do
+  cmdLineOpts <- getOptions
+  configOpts <-
+    readYaml
+      =<< expandPath (cmdLineOpts ^. optsConfigDir </> "config.yaml")
+  let opts = configOpts <> cmdLineOpts
 
-  setLogLevel $ if verbose opts then LevelDebug else LevelInfo
+  setLogLevel $ if opts ^. optsVerbose then LevelDebug else LevelInfo
   setLogTimeFormat "%H:%M:%S"
 
-  when (dryRun opts) $
+  when (opts ^. optsDryRun) $
     warn' "`--dryrun' specified, no changes will be made!"
-  debug' $ pack (ppShow opts)
 
-  processBindings opts `finally` stopGlobalPool
+  debug' $ "Command-line options: " <> pack (ppShow cmdLineOpts)
+  debug' $ "Config file options: " <> pack (ppShow configOpts)
+  debug' $ "Initial composite options: " <> pack (ppShow opts)
 
-directoryContents :: FilePath -> IO [FilePath]
-directoryContents p = map (p </>) <$> listDirectory p
+  runReaderT processBindings opts `finally` stopGlobalPool
 
-readFilesets :: IO (Map Text Fileset)
-readFilesets = do
-  confD <- expandPath (configDir </> "conf.d")
-  exists <- doesDirectoryExist confD
-  unless exists $
-    errorL $
-      "Please define filesets, "
-        <> "using files named "
-        <> pack configDir
-        <> "conf.d/<name>.yaml"
-  fmap (M.fromList . map ((^. fsName) &&& id)) $ do
-    contents <- directoryContents confD
-    forM (filter (\n -> takeExtension n == ".yaml") contents) $
-      liftIO . readYaml
-
-readYaml :: (FromJSON a) => FilePath -> IO a
-readYaml p =
-  decodeFileEither p >>= \case
-    Left err -> errorL $ pack p <> ": " <> tshow err
-    Right d -> pure d
-
-processBindings :: Options -> IO ()
-processBindings opts = case cliArgs opts of
-  host : hosts@(_ : _) -> do
-    fsets <- readFilesets
-    let here = parseHost (pack host)
-        bindings =
-          relevantBindings
-            opts
-            here
-            fsets
-            (map (parseHost . pack) hosts)
-    debug' $
-      "Local host "
-        <> here ^. hostName
-        <> " with "
-        <> tshow (here ^. hostMaxJobs)
-        <> " sending jobs"
-    hereSlots <- newQSem (here ^. hostMaxJobs)
-    thereSlotsAll <- forM (M.keys bindings) $ \there -> do
+processBindings :: App ()
+processBindings = do
+  opts <- ask
+  case opts ^. optsCliArgs of
+    host : hosts@(_ : _) -> liftIO do
+      fsets <- readFilesets opts
+      let here = parseHost (pack host)
+          bindings =
+            relevantBindings
+              opts
+              here
+              fsets
+              (map (parseHost . pack) hosts)
       debug' $
-        "Remote host "
-          <> there ^. hostName
+        "Local host "
+          <> here ^. hostName
           <> " with "
-          <> tshow (there ^. hostMaxJobs)
-          <> " receiving jobs"
-      newQSem (there ^. hostMaxJobs)
-    parallel_ $ do
-      (bnds, thereSlots) <- zip (M.elems bindings) thereSlotsAll
-      map (go hereSlots thereSlots) bnds
-  _ -> errorL $ "Usage: pushme FROM TO..."
+          <> tshow (here ^. hostMaxJobs)
+          <> " sending jobs"
+      hereSlots <- newQSem (here ^. hostMaxJobs)
+      thereSlotsAll <- forM (M.keys bindings) $ \there -> do
+        debug' $
+          "Remote host "
+            <> there ^. hostName
+            <> " with "
+            <> tshow (there ^. hostMaxJobs)
+            <> " receiving jobs"
+        newQSem (there ^. hostMaxJobs)
+      parallel_ do
+        (bnds, thereSlots) <- zip (M.elems bindings) thereSlotsAll
+        map (go opts hereSlots thereSlots) bnds
+    _ -> log' "Usage: pushme FROM TO..."
   where
-    go p q bnd =
+    go opts p q bnd =
       bracket_ (waitQSem p) (signalQSem p) $
         bracket_ (waitQSem q) (signalQSem q) $
-          applyBinding bnd opts
+          runReaderT (applyBinding bnd) opts
 
-collect :: (Ord b) => (a -> b) -> [a] -> Map b [a]
-collect f =
-  foldl'
-    ( \m x ->
-        m
-          & at (f x) %~ \case
-            Nothing -> Just [x]
-            Just xs -> Just (x : xs)
-    )
-    mempty
+    readFilesets :: Options -> IO (Map Text Fileset)
+    readFilesets opts = do
+      confD <- expandPath (opts ^. optsConfigDir </> "conf.d")
+      exists <- doesDirectoryExist confD
+      unless exists $
+        errorL $
+          "Please define filesets, "
+            <> "using files named "
+            <> pack (opts ^. optsConfigDir)
+            <> "conf.d/<name>.yaml"
+      directoryContents confD
+        >>= mapM readYaml . filter (\n -> takeExtension n == ".yaml")
+        <&> M.fromList . map ((^. filesetName) &&& id)
 
-relevantBindings ::
-  Options ->
-  Host ->
-  Map Text Fileset ->
-  [Host] ->
-  Map Host [Binding]
-relevantBindings opts here fsets hosts =
-  M.map
-    (sortOn (^. fileset . fsPriority))
-    (collect (^. target) bindings)
-  where
-    bindings = do
-      fset <- M.elems fsets
-      there <- hosts
-      maybeToList $ do
-        src <- fset ^. fsStores . at (here ^. hostName)
-        dest <- fset ^. fsStores . at (there ^. hostName)
-        guard $
-          not
-            ( maybe
-                False
-                (not . (here ^. hostName `elem`))
-                (dest ^. rsyncReceiveFrom)
-            )
-        let binding = Binding fset here there src dest
-        guard $ isMatching binding
-        pure binding
-
-    isMatching bnd =
-      (T.null fss || matchText fss (fs ^. fsName))
-        && (T.null cls || matchText cls (fs ^. fsClass))
+    relevantBindings ::
+      Options ->
+      Host ->
+      Map Text Fileset ->
+      [Host] ->
+      Map Host [Binding]
+    relevantBindings opts here fsets hosts =
+      M.map
+        (sortOn (^. bindingFileset . filesetPriority))
+        (collect (^. bindingTargetHost) bindings)
       where
-        fs = bnd ^. fileset
-        fss = pack (fromMaybe "" (filesets opts))
-        cls = pack (fromMaybe "" (classes opts))
+        bindings :: [Binding]
+        bindings = do
+          fset <- M.elems fsets
+          there <- hosts
+          maybeToList do
+            (src, _) <- fset ^. filesetStores . at (here ^. hostName)
+            (dest, destOpts) <- fset ^. filesetStores . at (there ^. hostName)
+            guard $
+              not
+                ( maybe
+                    False
+                    (not . (here ^. hostName `elem`))
+                    (destOpts ^. rsyncReceiveFrom)
+                )
+            let binding =
+                  Binding
+                    { _bindingFileset = fset,
+                      _bindingSourceHost = here,
+                      _bindingSourcePath = src,
+                      _bindingTargetHost = there,
+                      _bindingTargetPath = dest,
+                      _bindingRsyncOpts =
+                        case opts ^. optsRsyncOpts <> fset ^. filesetCommon of
+                          Nothing -> destOpts
+                          Just common -> common <> destOpts
+                    }
+            guard $ isMatching binding
+            pure binding
 
-applyBinding :: Binding -> Options -> IO ()
-applyBinding bnd = runReaderT go
-  where
-    go :: App ()
-    go = do
-      log' $
-        "Sending "
-          <> (bnd ^. source . hostName)
-          <> "/"
-          <> (bnd ^. fileset . fsName)
-          <> " -> "
-          <> (bnd ^. target . hostName)
-      syncStores bnd (bnd ^. this) (bnd ^. that)
+        isMatching :: Binding -> Bool
+        isMatching bnd =
+          (null fss || any id (matchText (fs ^. filesetName) <$> fss))
+            && (null cls || any id (matchText <$> cs <*> cls))
+          where
+            fs = bnd ^. bindingFileset
+            cs = fromMaybe [] (fs ^. filesetClasses)
+            fss = fromMaybe [] (opts ^. optsFilesets)
+            cls = fromMaybe [] (opts ^. optsClasses)
+
+applyBinding :: Binding -> App ()
+applyBinding bnd = do
+  log' $
+    "Sending "
+      <> (bnd ^. bindingSourceHost . hostName)
+      <> "/"
+      <> (bnd ^. bindingFileset . filesetName)
+      <> " -> "
+      <> (bnd ^. bindingTargetHost . hostName)
+  debug' $ pack (ppShow bnd)
+  syncStores
+    bnd
+    (bnd ^. bindingSourcePath)
+    (bnd ^. bindingTargetPath)
+    (bnd ^. bindingRsyncOpts)
 
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
 checkDirectory _ path False =
@@ -301,7 +273,10 @@ checkDirectory (isLocal -> True) path True =
   liftIO $ doesDirectoryExist path
 checkDirectory bnd path True =
   (ExitSuccess ==) . fstOf3
-    <$> execute (targetHost bnd) "test" ["-d", escape (pack path)]
+    <$> execute
+      (remoteHost bnd)
+      "test"
+      ["-d", unpack (escape (pack path))]
   where
     escape :: Text -> Text
     escape x
@@ -309,109 +284,72 @@ checkDirectory bnd path True =
           "'" <> T.replace "\"" "\\\"" x <> "'"
       | otherwise = x
 
-syncStores :: Binding -> Rsync -> Rsync -> App ()
-syncStores bnd s1 s2 = do
+syncStores :: Binding -> FilePath -> FilePath -> RsyncOptions -> App ()
+syncStores bnd src dest roDest = do
   exists <-
     (&&)
       <$> checkDirectory bnd l False
       <*> checkDirectory bnd r True
   if exists
     then
-      rsync
+      invokeRsync
         bnd
-        s1
         l
-        s2
-        ( case targetHost bnd of
+        roDest
+        ( case remoteHost bnd of
             Nothing -> pack r
             Just targ -> targ ^. hostName <> ":" <> pack r
         )
-    else liftIO $ do
+    else liftIO do
       warn $ "Either local directory missing: " <> pack l
       warn $ "OR remote directory missing: " <> pack r
   where
-    (asDirectory -> l) = s1 ^. rsyncPath
-    (asDirectory -> r) = s2 ^. rsyncPath
+    (asDirectory -> l) = src
+    (asDirectory -> r) = dest
 
-rsync :: Binding -> Rsync -> FilePath -> Rsync -> Text -> App ()
-rsync bnd srcRsync src destRsync dest = do
+invokeRsync :: Binding -> FilePath -> RsyncOptions -> Text -> App ()
+invokeRsync bnd src roDest dest = do
   opts <- ask
-  incl <- case includeFrom opts of
-    Just path -> (: []) . pack <$> liftIO (expandPath path)
-    Nothing -> pure []
-  let args = ["--include-from=" <> path | path <- incl]
-      rfs =
-        fromMaybe
-          []
-          ( destRsync
-              ^. rsyncFilters
-              <|> srcRsync
-                ^. rsyncFilters
-          )
-  case rfs of
-    [] -> go args
-    filters -> withSystemTempFile "filters" $ \fpath h -> do
-      liftIO $ do
-        T.hPutStr h (T.unlines filters)
+  case roDest ^. rsyncFilters of
+    Nothing -> go opts []
+    Just filters -> withSystemTempFile "filters" $ \fpath h -> do
+      liftIO do
+        T.hPutStr h filters
         hClose h
-      when (verbose opts) $
+      when (opts ^. optsVerbose) $
         debug' $
-          "INCLUDE FROM:\n" <> T.unlines filters
-      go ("--include-from=" <> pack fpath : args)
+          "INCLUDE FROM:\n" <> filters
+      go opts ["--include-from=" <> pack fpath]
   where
-    go xs = do
-      args <-
-        rsyncArguments
-          (pack src)
-          dest
-          ( fromMaybe
-              False
-              ( (&&)
-                  <$> srcRsync ^. rsyncPreserveAttrs
-                  <*> destRsync ^. rsyncPreserveAttrs
-              )
-          )
-          ( xs
-              ++ fromMaybe
-                []
-                ( srcRsync
-                    ^. rsyncOptions
-                    <|> destRsync
-                      ^. rsyncOptions
-                )
-          )
-      doRsync (bnd ^. fileset . fsName) args
+    go opts args =
+      doRsync
+        (bnd ^. bindingFileset . filesetName)
+        (rsyncArguments opts args)
 
-rsyncArguments :: Text -> Text -> Bool -> [Text] -> App [Text]
-rsyncArguments src dest preserveAttrs options = do
-  opts <- ask
-  pure $
-    ["-aHEy"]
-      <> ["-AXUN" | preserveAttrs]
-      <> ( case ssh opts of
-             Just cmd -> ["--rsh", pack cmd]
-             _ -> []
-         )
-      <> ["-n" | dryRun opts]
-      <> ["--checksum" | checksum opts]
-      <> ( if verbose opts
-             then ["-v"]
-             else ["--stats"]
-         )
-      <> options
-      <> [ src,
-           if ":" `T.isInfixOf` dest
-             then T.intercalate "\\ " (T.words dest)
-             else dest
-         ]
+    rsyncArguments :: Options -> [Text] -> [Text]
+    rsyncArguments opts args =
+      ["-aHEy"]
+        <> ["-AXUN" | fromMaybe False (roDest ^. rsyncPreserveAttrs)]
+        <> ["-n" | opts ^. optsDryRun]
+        <> ( if opts ^. optsVerbose
+               then ["-v"]
+               else ["--stats"]
+           )
+        <> args
+        <> fromMaybe [] (roDest ^. rsyncOptions)
+        <> [ pack src,
+             if ":" `T.isInfixOf` dest
+               then T.intercalate "\\ " (T.words dest)
+               else dest
+           ]
 
 doRsync :: Text -> [Text] -> App ()
 doRsync label args = do
   opts <- ask
-  (ec, diff, output) <- execute Nothing "rsync" args
-  when (ec == ExitSuccess && not (dryRun opts)) $
-    if verbose opts
-      then liftIO $ T.putStr output
+  (ec, diff, output) <- execute Nothing "rsync" (map unpack args)
+  when (ec == ExitSuccess && not (opts ^. optsDryRun)) $
+    if opts ^. optsVerbose
+      then liftIO $ putStr output
       else do
         let stats =
               M.fromList
@@ -420,14 +358,15 @@ doRsync label args = do
                       . T.breakOn ": "
                   )
                 $ filter (": " `T.isInfixOf`)
-                $ T.lines output
+                $ map pack
+                $ lines output
             files = field "Number of files" stats
             sent =
               field "Number of regular files transferred" stats
                 <|> field "Number of files transferred" stats
             total = field "Total file size" stats
             xfer = field "Total transferred file size" stats
-            den = (\x -> if x then 1000 else 1024) $ siUnits opts
+            den = (\x -> if x then 1000 else 1024) $ opts ^. optsSiUnits
         log' $
           label
             <> ": \ESC[34mSent \ESC[35m"
@@ -485,33 +424,26 @@ doRsync label args = do
 execute ::
   Maybe Host ->
   FilePath ->
-  [Text] ->
-  App (ExitCode, NominalDiffTime, Text)
+  [String] ->
+  App (ExitCode, NominalDiffTime, String)
 execute mhost name args = do
   opts <- ask
   cmdName <- liftIO $ findCmd name
   let (name', args') = case mhost of
         Nothing -> (cmdName, args)
-        Just h -> remote opts h (cmdName, args)
+        Just h -> remote h (cmdName, args)
       runner p xs =
         liftIO $
           timeFunction (readProcessWithExitCode p xs "")
-  let (sshCmd : sshArgs) = words name'
-  n <- liftIO $ findCmd sshCmd
-  debug' $
-    pack n
-      <> " "
-      <> T.intercalate
-        " "
-        (map tshow (map T.pack sshArgs ++ args'))
+  debug' $ pack name' <> " " <> T.intercalate " " (map tshow args')
   (diff, (ec, out, err)) <-
-    if dryRun opts
+    if opts ^. optsDryRun
       then pure (0, (ExitSuccess, "", ""))
-      else runner n (map unpack args')
+      else runner name' args'
   unless (ec == ExitSuccess) $
     errorL $
       "Error running command: " <> pack err
-  pure (ec, diff, pack out)
+  pure (ec, diff, out)
   where
     timeFunction :: IO a -> IO (NominalDiffTime, a)
     timeFunction function = do
@@ -530,18 +462,26 @@ execute mhost name args = do
             Just c' -> pure c'
       | otherwise = pure n
 
-    remote :: Options -> Host -> (FilePath, [Text]) -> (FilePath, [Text])
-    remote opts host (p, xs) =
-      ( fromMaybe "ssh" (ssh opts),
-        host ^. hostName : pack p : xs
+    remote :: Host -> (FilePath, [String]) -> (FilePath, [String])
+    remote host (p, xs) =
+      ( "ssh",
+        unpack (host ^. hostName) : p : xs
       )
 
-fstOf3 :: (a, b, c) -> a
-fstOf3 (a, _, _) = a
+-- Utility functions
+
+readYaml :: (FromJSON a) => FilePath -> IO a
+readYaml p =
+  decodeFileEither p >>= \case
+    Left err -> errorL $ pack p <> ": " <> tshow err
+    Right d -> pure d
 
 expandPath :: FilePath -> IO FilePath
 expandPath ('~' : '/' : p) = (</> p) <$> getHomeDirectory
 expandPath p = pure p
+
+directoryContents :: FilePath -> IO [FilePath]
+directoryContents p = map (p </>) <$> listDirectory p
 
 asDirectory :: FilePath -> FilePath
 asDirectory (pack -> fp) =
@@ -549,6 +489,20 @@ asDirectory (pack -> fp) =
     if T.null fp || T.last fp /= '/'
       then T.append fp "/"
       else fp
+
+collect :: (Ord b) => (a -> b) -> [a] -> Map b [a]
+collect f =
+  foldl'
+    ( \m x ->
+        m
+          & at (f x) %~ \case
+            Nothing -> Just [x]
+            Just xs -> Just (x : xs)
+    )
+    mempty
+
+fstOf3 :: (a, b, c) -> a
+fstOf3 (a, _, _) = a
 
 matchText :: Text -> Text -> Bool
 matchText = (=~) `on` unpack

@@ -1,12 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pushme.Options where
 
+import Control.Lens hiding (argument)
 import Control.Logging
 import Data.Aeson hiding (Options)
-import Data.Data (Data)
-import Data.Typeable (Typeable)
+import Data.Text (Text)
+import qualified Data.Text as T
 import Options.Applicative hiding (Success)
 
 version :: String
@@ -19,93 +21,138 @@ pushmeSummary :: String
 pushmeSummary =
   "pushme " ++ version ++ ", (C) " ++ copyright ++ " John Wiegley"
 
-data Options = Options
-  { dryRun :: Bool,
-    ssh :: Maybe String,
-    includeFrom :: Maybe FilePath,
-    checksum :: Bool,
-    filesets :: Maybe String,
-    classes :: Maybe String,
-    siUnits :: Bool,
-    verbose :: Bool,
-    cliArgs :: [String]
+data RsyncOptions = RsyncOptions
+  { _rsyncFilters :: Maybe Text,
+    _rsyncPreserveAttrs :: Maybe Bool,
+    _rsyncOptions :: Maybe [Text],
+    _rsyncReceiveFrom :: Maybe [Text]
   }
-  deriving (Data, Typeable, Show, Eq)
+  deriving (Show, Eq)
+
+instance FromJSON RsyncOptions where
+  parseJSON (Object v) =
+    RsyncOptions
+      <$> v .:? "Filters"
+      <*> v .:? "PreserveAttrs"
+      <*> v .:? "Options"
+      <*> v .:? "ReceiveFrom"
+  parseJSON _ = errorL "Error parsing Rsync"
+
+instance Semigroup RsyncOptions where
+  RsyncOptions b1 c1 d1 e1
+    <> RsyncOptions b2 c2 d2 e2 =
+      RsyncOptions
+        (b1 <|> b2)
+        (c1 <|> c2)
+        (d1 <|> d2)
+        (e1 <|> e2)
+
+makeLenses ''RsyncOptions
+
+data Options = Options
+  { _optsConfigDir :: FilePath,
+    _optsDryRun :: Bool,
+    _optsFilesets :: Maybe [Text],
+    _optsClasses :: Maybe [Text],
+    _optsSiUnits :: Bool,
+    _optsVerbose :: Bool,
+    _optsRsyncOpts :: Maybe RsyncOptions,
+    _optsCliArgs :: [String]
+  }
+  deriving (Show, Eq)
 
 instance FromJSON Options where
   parseJSON (Object v) =
     Options
-      <$> v .:? "dryRun" .!= False
-      <*> v .:? "ssh"
-      <*> v .:? "includeFrom"
-      <*> v .:? "checksum" .!= False
+      <$> v .:? "config" .!= "~/.config/pushme"
+      <*> v .:? "dryRun" .!= False
       <*> v .:? "filesets"
       <*> v .:? "classes"
       <*> v .:? "siUnits" .!= False
       <*> v .:? "verbose" .!= False
+      <*> v .:? "rsyncOptions"
       <*> pure []
   parseJSON _ = errorL "Error parsing Options"
 
 instance Semigroup Options where
-  Options b1 c1 e1 f1 h1 i1 j1 k1 l1
-    <> Options b2 c2 e2 f2 h2 i2 j2 k2 l2 =
+  Options _a1 b1 c1 d1 e1 f1 g1 h1
+    <> Options a2 b2 c2 d2 e2 f2 g2 h2 =
       Options
+        a2
         (b1 || b2)
         (c1 <|> c2)
-        (e1 <|> e2)
+        (d1 <|> d2)
+        (e1 || e2)
         (f1 || f2)
+        (g1 <> g2)
         (h1 <|> h2)
-        (i1 <|> i2)
-        (j1 || j2)
-        (k1 || k2)
-        (l1 <|> l2)
+
+makeLenses ''Options
+
+separated :: Char -> ReadM [Text]
+separated c = T.split (== c) <$> str
 
 pushmeOpts :: Parser Options
 pushmeOpts =
   Options
-    <$> switch
+    <$> strOption
+      ( long "config"
+          <> value "~/.config/pushme"
+          <> help "Config directory (default: ~/.config/pushme)"
+      )
+    <*> switch
       ( short 'n'
           <> long "dry-run"
-          <> help "Don't take any actions"
+          <> help "Do not take any actions, just report"
       )
     <*> optional
-      ( strOption
-          ( long "ssh"
-              <> help "Use a specific ssh command"
-          )
-      )
-    <*> optional
-      ( strOption
-          ( long "include-from"
-              <> help "Use a specific rsync command"
-          )
-      )
-    <*> switch
-      ( long "checksum"
-          <> help "Pass --checksum flag to rsync"
-      )
-    <*> optional
-      ( strOption
+      ( option
+          (separated ',')
           ( short 'f'
               <> long "filesets"
-              <> help "Synchronize the given fileset(s) (comma-sep)"
+              <> help "File sets to synchronize (comma-separated)"
           )
       )
     <*> optional
-      ( strOption
+      ( option
+          (separated ',')
           ( short 'c'
               <> long "classes"
-              <> help "Filesets classes to synchronize (comma-sep)"
+              <> help "Classes to synchronize (comma-separated)"
           )
       )
     <*> switch
-      ( long "si"
-          <> help "Use 1000 instead of 1024 to divide"
+      ( short 's'
+          <> long "si-units"
+          <> help "Use 1000 instead of 1024 as a divisor"
       )
     <*> switch
       ( short 'v'
           <> long "verbose"
           <> help "Report progress verbosely"
+      )
+    <*> optional
+      ( RsyncOptions
+          <$> optional
+            ( strOption
+                ( long "rsync-filters"
+                    <> help "rsync filters to pass using --include-from"
+                )
+            )
+          <*> optional
+            ( switch
+                ( long "rsync-preserve-attrs"
+                    <> help "Whether to preserve attrs by passing -AXUN"
+                )
+            )
+          <*> optional
+            ( option
+                (separated ' ')
+                ( long "rsync-options"
+                    <> help "Space-separated list of options to pass to rsync"
+                )
+            )
+          <*> pure Nothing
       )
     <*> many (argument (eitherReader Right) (metavar "ARGS"))
 
