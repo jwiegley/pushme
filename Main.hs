@@ -153,7 +153,7 @@ processBindings = do
   opts <- ask
   case opts ^. optsCliArgs of
     host : hosts@(_ : _) -> liftIO do
-      fsets <- readFilesets opts
+      fsets <- traverse expandFilesetPaths =<< readFilesets opts
       let here = parseHost (pack host)
           bindings =
             relevantBindings
@@ -479,6 +479,10 @@ readYaml p =
 expandPath :: FilePath -> IO FilePath
 expandPath ('~' : '/' : p) = (</> p) <$> getHomeDirectory
 expandPath p = pure p
+
+expandFilesetPaths :: Fileset -> IO Fileset
+expandFilesetPaths fs =
+  fs & filesetStores %%~ traverse (\(a, b) -> (,) <$> expandPath a <*> pure b)
 
 directoryContents :: FilePath -> IO [FilePath]
 directoryContents p = map (p </>) <$> listDirectory p
