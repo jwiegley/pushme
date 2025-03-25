@@ -38,7 +38,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
 import Data.Traversable (forM)
-import Data.Yaml (decodeFileEither)
+import Data.Yaml (decodeFileEither, prettyPrintParseException)
 import Pushme.Options
 import System.Directory
   ( doesDirectoryExist,
@@ -69,7 +69,7 @@ makeLenses ''Fileset
 decodeEnrichedOptions :: Map Text Value -> Parser (FilePath, RsyncOptions)
 decodeEnrichedOptions m =
   parseM (m ^. at "Path") >>= \case
-    Nothing -> errorL "Missing value for Path"
+    Nothing -> fail "Missing value for Path"
     Just path ->
       (path,)
         <$> ( RsyncOptions
@@ -80,7 +80,8 @@ decodeEnrichedOptions m =
             )
   where
     parseM :: (FromJSON a) => Maybe Value -> Parser (Maybe a)
-    parseM = traverse parseJSON
+    parseM Nothing = pure Nothing
+    parseM (Just v) = parseJSON v
 
 instance FromJSON Fileset where
   parseJSON (Object v) =
@@ -473,10 +474,11 @@ execute mhost name args = do
 readYaml :: (FromJSON a) => FilePath -> IO a
 readYaml p =
   decodeFileEither p >>= \case
-    Left err -> errorL $ pack p <> ": " <> tshow err
+    Left err -> errorL $ pack $ p <> ": " <> prettyPrintParseException err
     Right d -> pure d
 
 expandPath :: FilePath -> IO FilePath
+expandPath ['~'] = getHomeDirectory
 expandPath ('~' : '/' : p) = (</> p) <$> getHomeDirectory
 expandPath p = pure p
 
