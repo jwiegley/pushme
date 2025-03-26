@@ -324,7 +324,10 @@ invokeRsync bnd src roDest dest = do
   where
     go opts args =
       doRsync
-        (bnd ^. bindingFileset . filesetName)
+        ( bnd ^. bindingTargetHost . hostName
+            <> "/"
+            <> bnd ^. bindingFileset . filesetName
+        )
         (rsyncArguments opts args)
 
     rsyncArguments :: Options -> [Text] -> [Text]
@@ -370,11 +373,11 @@ doRsync label args = do
             den = (\x -> if x then 1000 else 1024) $ opts ^. optsSiUnits
         log' $
           label
-            <> ": \ESC[34mSent \ESC[35m"
+            <> ": \ESC[35m"
             <> humanReadable den (fromMaybe 0 xfer)
-            <> "\ESC[0m\ESC[34m in "
+            <> "\ESC[0m\ESC[36m in "
             <> commaSep (fromIntegral (fromMaybe 0 sent))
-            <> " files\ESC[0m (out of "
+            <> "\ESC[0m ("
             <> humanReadable den (fromMaybe 0 total)
             <> " in "
             <> commaSep (fromIntegral (fromMaybe 0 files))
