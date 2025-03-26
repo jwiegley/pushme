@@ -257,8 +257,6 @@ applyBinding :: Binding -> App ()
 applyBinding bnd = do
   log' $
     "Sending "
-      <> (bnd ^. bindingSourceHost . hostName)
-      <> "/"
       <> (bnd ^. bindingFileset . filesetName)
       <> " -> "
       <> (bnd ^. bindingTargetHost . hostName)
