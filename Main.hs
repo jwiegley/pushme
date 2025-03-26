@@ -188,19 +188,19 @@ processBindings = do
         bracket_ (waitQSem q) (signalQSem q) $
           runReaderT (applyBinding bnd) opts
 
-    readFilesets :: Options -> IO (Map Text Fileset)
-    readFilesets opts = do
-      confD <- expandPath (opts ^. optsConfigDir </> "filesets")
-      exists <- doesDirectoryExist confD
-      unless exists $
-        errorL $
-          "Please define filesets, "
-            <> "using files named "
-            <> pack (opts ^. optsConfigDir)
-            <> "filesets/<name>.yaml"
-      directoryContents confD
-        >>= mapM readYaml . filter (\n -> takeExtension n == ".yaml")
-        <&> M.fromList . map ((^. filesetName) &&& id)
+    applyBinding :: Binding -> App ()
+    applyBinding bnd = do
+      log' $
+        "Sending "
+          <> (bnd ^. bindingFileset . filesetName)
+          <> " -> "
+          <> (bnd ^. bindingTargetHost . hostName)
+      debug' $ pack (ppShow bnd)
+      syncStores
+        bnd
+        (bnd ^. bindingSourcePath)
+        (bnd ^. bindingTargetPath)
+        (bnd ^. bindingRsyncOpts)
 
     relevantBindings ::
       Options ->
@@ -253,19 +253,19 @@ processBindings = do
             fss = fromMaybe [] (opts ^. optsFilesets)
             cls = fromMaybe [] (opts ^. optsClasses)
 
-applyBinding :: Binding -> App ()
-applyBinding bnd = do
-  log' $
-    "Sending "
-      <> (bnd ^. bindingFileset . filesetName)
-      <> " -> "
-      <> (bnd ^. bindingTargetHost . hostName)
-  debug' $ pack (ppShow bnd)
-  syncStores
-    bnd
-    (bnd ^. bindingSourcePath)
-    (bnd ^. bindingTargetPath)
-    (bnd ^. bindingRsyncOpts)
+    readFilesets :: Options -> IO (Map Text Fileset)
+    readFilesets opts = do
+      confD <- expandPath (opts ^. optsConfigDir </> "filesets")
+      exists <- doesDirectoryExist confD
+      unless exists $
+        errorL $
+          "Please define filesets, "
+            <> "using files named "
+            <> pack (opts ^. optsConfigDir)
+            <> "filesets/<name>.yaml"
+      directoryContents confD
+        >>= mapM readYaml . filter (\n -> takeExtension n == ".yaml")
+        <&> M.fromList . map ((^. filesetName) &&& id)
 
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
 checkDirectory _ path False =
