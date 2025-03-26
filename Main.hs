@@ -77,6 +77,7 @@ decodeEnrichedOptions m =
                 <*> parseM (m ^. at "PreserveAttrs")
                 <*> parseM (m ^. at "Options")
                 <*> parseM (m ^. at "ReceiveFrom")
+                <*> (fromMaybe True <$> parseM (m ^. at "Active"))
             )
   where
     parseM :: (FromJSON a) => Maybe Value -> Parser (Maybe a)
@@ -239,6 +240,7 @@ processBindings = do
                           Just common -> common <> destOpts
                     }
             guard $ isMatching binding
+            guard $ destOpts ^. rsyncActive
             pure binding
 
         isMatching :: Binding -> Bool

@@ -25,7 +25,8 @@ data RsyncOptions = RsyncOptions
   { _rsyncFilters :: Maybe Text,
     _rsyncPreserveAttrs :: Maybe Bool,
     _rsyncOptions :: Maybe [Text],
-    _rsyncReceiveFrom :: Maybe [Text]
+    _rsyncReceiveFrom :: Maybe [Text],
+    _rsyncActive :: Bool
   }
   deriving (Show, Eq)
 
@@ -36,16 +37,18 @@ instance FromJSON RsyncOptions where
       <*> v .:? "PreserveAttrs"
       <*> v .:? "Options"
       <*> v .:? "ReceiveFrom"
+      <*> v .:? "Active" .!= True
   parseJSON _ = errorL "Error parsing Rsync"
 
 instance Semigroup RsyncOptions where
-  RsyncOptions b1 c1 d1 e1
-    <> RsyncOptions b2 c2 d2 e2 =
+  RsyncOptions b1 c1 d1 e1 f1
+    <> RsyncOptions b2 c2 d2 e2 f2 =
       RsyncOptions
         (b2 <|> b1)
         (c2 <|> c1)
         (d2 <|> d1)
         (e2 <|> e1)
+        (f1 && f2)
 
 makeLenses ''RsyncOptions
 
@@ -153,6 +156,7 @@ pushmeOpts =
                 )
             )
           <*> pure Nothing
+          <*> pure True
       )
     <*> many (argument (eitherReader Right) (metavar "ARGS"))
 
