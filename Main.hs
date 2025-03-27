@@ -25,7 +25,7 @@ import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
 import Data.Aeson hiding (Options)
 import Data.Aeson.Types (Parser)
 import Data.Function (on)
-import Data.List (sortOn)
+import Data.List (foldl', sortOn)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
