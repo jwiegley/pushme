@@ -1,0 +1,113 @@
+Name:     'kadena'
+Priority: 60
+Classes:
+  - 'small'
+
+Stores:
+  hera:
+    Path: /Users/johnw/kadena
+    ReceiveFrom:
+      - clio
+
+  clio:
+    Path: /Users/johnw/kadena
+    ReceiveFrom:
+      - hera
+
+  athena:
+    Path: /Users/johnw/kadena
+    ReceiveFrom:
+      - hera
+      - clio
+
+  tank:
+    Path: /Volumes/tank/kadena
+    ReceiveFrom:
+      - hera
+
+  vulcan:
+    Path: /Users/johnw/kadena
+    ReceiveFrom:
+      - hera
+      - clio
+
+  deimos:
+    Path: /home/johnw/kadena
+    Filters: |
+      + /chainweb-node/
+      - /chainweb-node/.envrc*
+      - /chainweb-node/dist/
+      - /chainweb-node/dist-newstyle/
+      - /chainweb-node/result*
+      - /*
+      - /*/
+      - /.*
+      - /.*/
+    ReceiveFrom:
+      - vulcan
+      - hermes
+
+  phobos:
+    Path: /home/johnw/kadena
+    Filters: |
+      + /chainweb-node/
+      - /chainweb-node/.envrc*
+      - /chainweb-node/dist/
+      - /chainweb-node/dist-newstyle/
+      - /chainweb-node/result*
+      - /*
+      - /*/
+      - /.*
+      - /.*/
+    ReceiveFrom:
+      - vulcan
+      - hermes
+
+  neso:
+    Path: /home/johnw/kadena
+    Filters: |
+      + /chainweb-node/
+      - /chainweb-node/.envrc*
+      - /chainweb-node/dist/
+      - /chainweb-node/dist-newstyle/
+      - /chainweb-node/result*
+      - /*
+      - /*/
+      - /.*
+      - /.*/
+    ReceiveFrom:
+      - vulcan
+      - hermes
+
+Common:
+  Filters: |
+    - *.agdai
+    - *.d
+    - *.db
+    - *.glob
+    - *.hi
+    - *.o
+    - *.vio
+    - *.viok
+    - *.vios
+    - *.vo
+    - *.vok
+    - *.vos
+    - *~
+    - .*.aux
+    - .*.cache
+    - .cabal*
+    - .cargo-home/
+    - .envrc
+    - .ghc.*
+    - .vagrant/
+    - .venv/
+    - MAlonzo/
+    - Makefile.coq
+    - Makefile.coq.conf
+    - cabal.project.local*
+    - dist-newstyle/
+    - dist/
+    - result
+    - result-*
+    - target/

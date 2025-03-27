@@ -1,0 +1,5 @@
+siUnits: true
+rsyncOptions:
+  PreserveAttrs: true
+  Options:
+    - "--include-from=/Users/johnw/.config/ignore.lst"

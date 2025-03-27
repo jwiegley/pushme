@@ -1,0 +1,14 @@
+Name:     'Audio'
+Priority: 170
+Classes:
+  - 'large'
+
+Stores:
+  hera:
+    Path: /Volumes/ext/Audio
+    ReceiveFrom: []
+
+  tank:
+    Path: /Volumes/tank/Audio
+    ReceiveFrom:
+      - hera

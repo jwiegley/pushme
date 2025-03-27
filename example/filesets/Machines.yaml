@@ -1,0 +1,32 @@
+Name:     'Machines'
+Priority: 100
+Classes:
+  - 'large'
+
+Stores:
+  hera:
+    Path: /Users/johnw/Machines
+    ReceiveFrom: []
+
+  clio:
+    Path: /Users/johnw/Machines
+    ReceiveFrom: []
+
+  tank:
+    Path: /Volumes/tank/Machines
+    Active: false
+    Filters: |
+      - *.dmg
+      - *.img
+      - *.iso
+      - *.sig
+      - *.tar
+      - *.vii
+      - *.xz
+      - /vagrant/
+    ReceiveFrom:
+      - hera
+
+  vulcan:
+    Path: /Users/johnw/Machines
+    ReceiveFrom: []

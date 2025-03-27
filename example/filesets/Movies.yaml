@@ -1,0 +1,14 @@
+Name:     'Movies'
+Priority: 120
+Classes:
+  - 'large'
+
+Stores:
+  hera:
+    Path: /Volumes/ext/Movies
+    ReceiveFrom: []
+
+  tank:
+    Path: /Volumes/tank/Movies
+    ReceiveFrom:
+      - hera

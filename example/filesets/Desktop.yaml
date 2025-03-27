@@ -1,0 +1,20 @@
+Name:     'Desktop'
+Priority: 30
+Classes:
+  - 'small'
+
+# For syncing between computers, iCloud is used
+
+Stores:
+  hera:
+    Path: ~/Desktop
+    ReceiveFrom: []
+  
+  clio:
+    Path: ~/Desktop
+    ReceiveFrom: []
+  
+  tank:
+    Path: /Volumes/tank/Desktop
+    ReceiveFrom:
+      - hera

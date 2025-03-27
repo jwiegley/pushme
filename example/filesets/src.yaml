@@ -1,0 +1,67 @@
+Name:     'src'
+Priority: 50
+Classes:
+  - 'small'
+
+Stores:
+  hera:
+    Path: /Users/johnw/src
+    PreserveAttrs: true
+    ReceiveFrom:
+      - clio
+
+  clio:
+    Path: /Users/johnw/src
+    ReceiveFrom:
+      - hera
+
+  athena:
+    Path: /Users/johnw/src
+    ReceiveFrom:
+      - hera
+      - clio
+
+  tank:
+    Path: /Volumes/tank/src
+    ReceiveFrom:
+      - hera
+      - clio
+
+  vulcan:
+    Path: /Users/johnw/src
+    ReceiveFrom:
+      - hera
+      - clio
+
+Common:
+  Filters: |
+    - *.agdai
+    - *.d
+    - *.db
+    - *.glob
+    - *.hi
+    - *.o
+    - *.vio
+    - *.viok
+    - *.vios
+    - *.vo
+    - *.vok
+    - *.vos
+    - *~
+    - .*.aux
+    - .*.cache
+    - .cabal*
+    - .cargo-home/
+    - .envrc
+    - .ghc.*
+    - .vagrant/
+    - .venv/
+    - MAlonzo/
+    - Makefile.coq
+    - Makefile.coq.conf
+    - cabal.project.local*
+    - dist-newstyle/
+    - dist/
+    - result
+    - result-*
+    - target/

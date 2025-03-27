@@ -1,0 +1,14 @@
+Name:     'Models'
+Priority: 110
+Classes:
+  - 'large'
+
+Stores:
+  hera:
+    Path: ~/.local/share/ollama/models
+    ReceiveFrom: []
+
+  tank:
+    Path: /Volumes/tank/Models
+    ReceiveFrom:
+      - hera

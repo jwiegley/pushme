@@ -1,0 +1,14 @@
+Name:     'Pictures'
+Priority: 150
+Classes:
+  - 'large'
+
+Stores:
+  hera:
+    Path: /Volumes/ext/Pictures
+    ReceiveFrom: []
+
+  tank:
+    Path: /Volumes/tank/Pictures
+    ReceiveFrom:
+      - hera

@@ -1,0 +1,33 @@
+Name:     'doc'
+Priority: 10
+Classes:
+  - 'small'
+
+Stores:
+  hera:
+    Path: /Users/johnw/doc
+    ReceiveFrom:
+      - clio
+    Filters: |
+      - /Apple II.dtBase2/
+      - /Archives.dtBase2/
+
+  clio:
+    Path: /Users/johnw/doc
+    ReceiveFrom:
+      - hera
+    Filters: |
+      - /Apple II.dtBase2/
+      - /Archives.dtBase2/
+
+  tank:
+    Path: /Volumes/tank/doc
+    ReceiveFrom:
+      - hera
+      - clio
+
+  vulcan:
+    Path: /Users/johnw/doc
+    ReceiveFrom:
+      - hera
+      - clio

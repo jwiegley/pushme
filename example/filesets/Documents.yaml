@@ -1,0 +1,20 @@
+Name:     'Documents'
+Priority: 40
+Classes:
+  - 'small'
+
+# For syncing between computers, iCloud is used
+
+Stores:
+  hera:
+    Path: /Users/johnw/Documents
+    ReceiveFrom: []
+  
+  clio:
+    Path: /Users/johnw/Documents
+    ReceiveFrom: []
+  
+  tank:
+    Path: /Volumes/tank/Documents
+    ReceiveFrom:
+      - hera

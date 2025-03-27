@@ -1,0 +1,14 @@
+Name:     'Music'
+Priority: 130
+Classes:
+  - 'large'
+
+Stores:
+  hera:
+    Path: /Volumes/ext/Music
+    ReceiveFrom: []
+
+  tank:
+    Path: /Volumes/tank/Music
+    ReceiveFrom:
+      - hera

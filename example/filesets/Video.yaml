@@ -1,0 +1,14 @@
+Name:     'Video'
+Priority: 160
+Classes:
+  - 'large'
+
+Stores:
+  hera:
+    Path: /Volumes/ext/Video
+    ReceiveFrom: []
+
+  tank:
+    Path: /Volumes/tank/Video
+    ReceiveFrom:
+      - hera

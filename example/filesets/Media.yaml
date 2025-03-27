@@ -1,0 +1,10 @@
+Name:     'Media'
+Priority: 200
+Classes:
+  - 'large'
+
+Stores:
+  tank:
+    Path: /Volumes/tank/Media
+    Active: false
+    ReceiveFrom: []

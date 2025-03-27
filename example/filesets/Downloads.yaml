@@ -1,0 +1,36 @@
+Name:     'Downloads'
+Priority: 70
+Classes:
+  - 'small'
+
+Stores:
+  hera:
+    Path: /Users/johnw/Downloads
+    ReceiveFrom:
+      - clio
+
+  clio:
+    Path: /Users/johnw/Downloads
+    ReceiveFrom:
+      - hera
+  
+  tank:
+    Path: /Volumes/tank/Downloads
+    ReceiveFrom:
+      - hera
+
+  vulcan:
+    Path: /Users/johnw/Downloads
+    ReceiveFrom:
+      - hera
+      - clio
+
+Common:
+  Filters: |
+    - *.aria2/
+    - *.download
+    - *.download/
+    - *.part
+    - *.part/
+    - *.partial
+    - *.partial/
