@@ -10,5 +10,7 @@ Stores:
 
   tank:
     Path: /Volumes/tank/Video
+    Filters: |
+      - /Zoom/
     ReceiveFrom:
       - hera

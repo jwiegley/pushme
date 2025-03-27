@@ -11,6 +11,7 @@ Stores:
     Filters: |
       - /Apple II.dtBase2/
       - /Archives.dtBase2/
+      - /*.dtBase2/Backup*
 
   clio:
     Path: /Users/johnw/doc
@@ -19,6 +20,7 @@ Stores:
     Filters: |
       - /Apple II.dtBase2/
       - /Archives.dtBase2/
+      - /*.dtBase2/Backup*
 
   tank:
     Path: /Volumes/tank/doc

@@ -200,15 +200,15 @@ Stores:
       - /Public/
       - /Video
       - /_Archived Items
-      - /athena/
-      - /clio/
       - /dl
       - /doc/
-      - /hera/
       - /iCloud
       - /kadena/
       - /org
       - /src/
+      - /athena/
+      - /clio/
+      - /hera/
       - /vulcan/
     ReceiveFrom:
       - hera
