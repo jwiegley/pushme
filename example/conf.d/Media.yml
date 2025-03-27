@@ -1,0 +1,13 @@
+Name:     'Media'
+Priority: 12
+Class:    'quick,main,sync'
+
+Stores:
+  tank:
+    Rsync:
+      Path: /Volumes/tank/Media
+      ReceiveOnly: true
+
+Options:
+  Rsync:
+    NoEscalation: true

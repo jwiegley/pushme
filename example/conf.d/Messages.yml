@@ -1,0 +1,26 @@
+Name:     'Messages'
+Priority: 50
+Class:    'quick,main,sync'
+
+Stores:
+  vulcan:
+    Rsync:
+      Path: /Users/johnw/Messages
+      ReceiveFrom:
+        - hermes
+  
+  tank:
+    Rsync:
+      Path: /Volumes/tank/Messages
+      DeleteExcluded: true
+      ReceiveOnly: true
+
+  hermes:
+    Rsync:
+      Path: /Users/johnw/Messages
+      ReceiveFrom:
+        - vulcan
+  
+Options:
+  Rsync:
+    NoEscalation: true

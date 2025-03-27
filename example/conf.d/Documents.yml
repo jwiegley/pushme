@@ -1,0 +1,23 @@
+Name:     'Documents'
+Priority: 12
+Class:    'quick,main,sync'
+
+Stores:
+  vulcan:
+    Rsync:
+      Path: /Users/johnw/Documents
+      SendOnly: true
+
+  tank:
+    Rsync:
+      Path: /Volumes/tank/Documents
+      ReceiveOnly: true
+  
+  hermes:
+    Rsync:
+      Path: /Users/johnw/Documents
+      SendOnly: true
+  
+Options:
+  Rsync:
+    NoEscalation: true

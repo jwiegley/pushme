@@ -1,0 +1,26 @@
+Name:     'Databases'
+Priority: 12
+Class:    'quick,main,sync'
+
+Stores:
+  vulcan:
+    Rsync:
+      Path: /Users/johnw/Databases
+      ReceiveFrom:
+        - hermes
+
+  hermes:
+    Rsync:
+      Path: /Users/johnw/Databases
+      ReceiveFrom:
+        - vulcan
+
+  tank:
+    Rsync:
+      Path: /Volumes/tank/Databases
+      DeleteExcluded: true
+      ReceiveOnly: true
+  
+Options:
+  Rsync:
+    NoEscalation: true

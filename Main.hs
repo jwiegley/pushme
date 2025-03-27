@@ -332,7 +332,7 @@ invokeRsync bnd src roDest dest = do
 
     rsyncArguments :: Options -> [Text] -> [Text]
     rsyncArguments opts args =
-      ["-aHEy"]
+      ["-aHEy", "--delete"]
         <> ["-AXUN" | fromMaybe False (roDest ^. rsyncPreserveAttrs)]
         <> ["-n" | opts ^. optsDryRun]
         <> ( if opts ^. optsVerbose

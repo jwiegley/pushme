@@ -1,0 +1,56 @@
+Name:     'src'
+Priority: 5
+Class:    'quick,main,sync'
+
+Stores:
+  vulcan:
+    Rsync:
+      Path: /Users/johnw/src
+      ReceiveFrom:
+        - hermes
+
+  hermes:
+    Rsync:
+      Path: /Users/johnw/src
+      ReceiveFrom:
+        - vulcan
+
+  athena:
+    Rsync:
+      Path: /Users/johnw/src
+      ReceiveOnly: true
+      ReceiveFrom:
+        - vulcan
+        - hermes
+
+  tank:
+    Rsync:
+      Path: /Volumes/tank/src
+      DeleteExcluded: true
+      ReceiveOnly: true
+
+Options:
+  Rsync:
+    NoEscalation: true
+    Filters:
+      - '- *.agdai'
+      - '- *.db?'
+      - '- *.glob'
+      - '- *.hi'
+      - '- *.o'
+      - '- *.vi?o[ks]?'
+      - '- *~'
+      - '- .*.aux'
+      - '- .cabal*'
+      - '- .cargo-home/'
+      - '- .envrc'
+      - '- .envrc.cache'
+      - '- .ghc.*'
+      - '- .vagrant/'
+      - '- MAlonzo/'
+      - '- cabal.project.local*'
+      - '- dist-newstyle/'
+      - '- dist/'
+      - '- result'
+      - '- result-*'
+      - '- target/'

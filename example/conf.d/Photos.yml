@@ -1,0 +1,18 @@
+Name:     'Photos'
+Priority: 130
+Class:    'large,data,annex'
+
+Stores:
+  vulcan:
+    Rsync:
+      Path: /Volumes/ext/Photos
+      SendOnly: true
+
+  tank:
+    Rsync:
+      Path: /Volumes/tank/Photos
+      ReceiveOnly: true
+
+Options:
+  Rsync:
+    NoEscalation: true

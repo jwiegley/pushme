@@ -1,0 +1,40 @@
+Name:     'Downloads'
+Priority: 100
+Class:    'large,data,sync'
+
+Stores:
+  vulcan:
+    Rsync:
+      Path: /Users/johnw/Downloads
+      ReceiveFrom:
+        - hermes
+  
+  # tank:
+  #   Rsync:
+  #     Path: /Volumes/tank/Downloads
+  #     DeleteExcluded: true
+  #     ReceiveOnly: true
+
+  hermes:
+    Rsync:
+      Path: /Users/johnw/Downloads
+      ReceiveFrom:
+        - vulcan
+
+Options:
+  Rsync:
+    NoEscalation: true
+    Filters:
+      - '- *.aria2/'
+      - '- *.download'
+      - '- *.download/'
+      - '- *.dvdmedia/'
+      - '- *.part'
+      - '- *.part/'
+      - '- *.partial'
+      - '- *.partial/'
+      - '- *.ripit/'
+      - '- Hermes*.dmg'
+      - '- Mohajer*.dmg'
+      - '- Nasim*.dmg'
+      - '- Vulcan*.dmg'

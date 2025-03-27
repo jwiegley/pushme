@@ -1,0 +1,35 @@
+Name:     'Machines'
+Priority: 400
+Class:    'large,data'
+
+Stores:
+  vulcan:
+    Rsync:
+      Path: /Users/johnw/Machines
+      SendOnly: true
+
+  tank:
+    Rsync:
+      Path: /Volumes/tank/Machines
+      ReceiveOnly: true
+      ReceiveFrom:
+        - vulcan
+      # Keep all archives in /Volumes/tank/Machines
+      Filters:
+        - '- *.dmg'
+        - '- *.img'
+        - '- *.iso'
+        - '- *.sig'
+        - '- *.tar'
+        - '- *.vii'
+        - '- *.xz'
+        - '- /vagrant/'
+
+  hermes:
+    Rsync:
+      Path: /Users/johnw/Machines
+      SendOnly: true
+
+Options:
+  Rsync:
+    NoEscalation: true

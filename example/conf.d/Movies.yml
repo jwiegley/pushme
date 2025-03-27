@@ -1,0 +1,23 @@
+Name:     'Movies'
+Priority: 12
+Class:    'quick,main,sync'
+
+Stores:
+  vulcan:
+    Rsync:
+      Path: /Users/johnw/Movies
+      SendOnly: true
+
+  hermes:
+    Rsync:
+      Path: /Users/johnw/Movies
+      SendOnly: true
+
+  tank:
+    Rsync:
+      Path: /Volumes/tank/Movies
+      ReceiveOnly: true
+
+Options:
+  Rsync:
+    NoEscalation: true
