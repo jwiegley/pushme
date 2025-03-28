@@ -446,7 +446,12 @@ execute mhost name args = do
       else runner name' args'
   unless (ec == ExitSuccess) $
     errorL $
-      "Error running command: " <> pack err
+      "Error running command: "
+        <> pack name
+        <> " "
+        <> pack (ppShow args)
+        <> ": "
+        <> pack err
   pure (ec, diff, out)
   where
     timeFunction :: IO a -> IO (NominalDiffTime, a)
