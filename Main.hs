@@ -42,12 +42,14 @@ import Data.Yaml (decodeFileEither, prettyPrintParseException)
 import Pushme.Options
 import System.Directory
   ( doesDirectoryExist,
-    findExecutable,
     getHomeDirectory,
     listDirectory,
   )
 import System.Exit (ExitCode (..))
-import System.FilePath.Posix (isRelative, takeExtension, (</>))
+import System.FilePath.Posix
+  ( takeExtension,
+    (</>),
+  )
 import System.IO (hClose)
 import System.IO.Temp (withSystemTempFile)
 import System.Process hiding (env)
@@ -74,7 +76,9 @@ decodeEnrichedOptions m =
       (path,)
         <$> ( RsyncOptions
                 <$> parseM (m ^. at "Filters")
-                <*> parseM (m ^. at "PreserveAttrs")
+                <*> (fromMaybe False <$> parseM (m ^. at "NoBasicOptions"))
+                <*> (fromMaybe False <$> parseM (m ^. at "NoDelete"))
+                <*> (fromMaybe False <$> parseM (m ^. at "PreserveAttrs"))
                 <*> parseM (m ^. at "Options")
                 <*> parseM (m ^. at "ReceiveFrom")
                 <*> (fromMaybe True <$> parseM (m ^. at "Active"))
@@ -193,7 +197,7 @@ processBindings = do
       log' $
         "Sending "
           <> (bnd ^. bindingFileset . filesetName)
-          <> " -> "
+          <> " → "
           <> (bnd ^. bindingTargetHost . hostName)
       debug' $ pack (ppShow bnd)
       syncStores
@@ -332,8 +336,9 @@ invokeRsync bnd src roDest dest = do
 
     rsyncArguments :: Options -> [Text] -> [Text]
     rsyncArguments opts args =
-      ["-aHEy", "--delete"]
-        <> ["-AXUN" | fromMaybe False (roDest ^. rsyncPreserveAttrs)]
+      ["-a" | not (roDest ^. rsyncNoBasicOptions)]
+        <> ["--delete" | not (roDest ^. rsyncNoDelete)]
+        <> ["-AXUNHE" | roDest ^. rsyncPreserveAttrs]
         <> ["-n" | opts ^. optsDryRun]
         <> ( if opts ^. optsVerbose
                then ["-v"]
@@ -430,9 +435,8 @@ execute ::
   FilePath ->
   [String] ->
   App (ExitCode, NominalDiffTime, String)
-execute mhost name args = do
+execute mhost cmdName args = do
   opts <- ask
-  cmdName <- liftIO $ findCmd name
   let (name', args') = case mhost of
         Nothing -> (cmdName, args)
         Just h -> remote h (cmdName, args)
@@ -447,7 +451,7 @@ execute mhost name args = do
   unless (ec == ExitSuccess) $
     errorL $
       "Error running command: "
-        <> pack name
+        <> pack cmdName
         <> " "
         <> pack (ppShow args)
         <> ": "
@@ -460,16 +464,6 @@ execute mhost name args = do
       a <- function
       endTime <- getCurrentTime
       pure (diffUTCTime endTime startTime, a)
-
-    findCmd :: FilePath -> IO FilePath
-    findCmd n
-      -- Assume commands with spaces in them are "known"
-      | " " `T.isInfixOf` pack n = pure n
-      | isRelative n =
-          findExecutable n >>= \case
-            Nothing -> errorL $ "Failed to find command: " <> pack n
-            Just c' -> pure c'
-      | otherwise = pure n
 
     remote :: Host -> (FilePath, [String]) -> (FilePath, [String])
     remote host (p, xs) =

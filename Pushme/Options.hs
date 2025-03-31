@@ -23,7 +23,9 @@ pushmeSummary =
 
 data RsyncOptions = RsyncOptions
   { _rsyncFilters :: Maybe Text,
-    _rsyncPreserveAttrs :: Maybe Bool,
+    _rsyncNoBasicOptions :: Bool,
+    _rsyncNoDelete :: Bool,
+    _rsyncPreserveAttrs :: Bool,
     _rsyncOptions :: Maybe [Text],
     _rsyncReceiveFrom :: Maybe [Text],
     _rsyncActive :: Bool
@@ -34,21 +36,25 @@ instance FromJSON RsyncOptions where
   parseJSON (Object v) =
     RsyncOptions
       <$> v .:? "Filters"
-      <*> v .:? "PreserveAttrs"
+      <*> v .:? "NoBasicOptions" .!= False
+      <*> v .:? "NoDelete" .!= False
+      <*> v .:? "PreserveAttrs" .!= False
       <*> v .:? "Options"
       <*> v .:? "ReceiveFrom"
       <*> v .:? "Active" .!= True
   parseJSON _ = errorL "Error parsing Rsync"
 
 instance Semigroup RsyncOptions where
-  RsyncOptions b1 c1 d1 e1 f1
-    <> RsyncOptions b2 c2 d2 e2 f2 =
+  RsyncOptions a1 b1 c1 d1 e1 f1 g1
+    <> RsyncOptions a2 b2 c2 d2 e2 f2 g2 =
       RsyncOptions
-        (b2 <|> b1)
-        (c2 <|> c1)
-        (d2 <|> d1)
+        (a2 <|> a1)
+        (b2 || b1)
+        (c2 || c1)
+        (d2 || d1)
         (e2 <|> e1)
-        (f1 && f2)
+        (f2 <|> f1)
+        (g1 && g2)
 
 makeLenses ''RsyncOptions
 
@@ -142,11 +148,17 @@ pushmeOpts =
                     <> help "rsync filters to pass using --include-from"
                 )
             )
-          <*> optional
-            ( switch
-                ( long "rsync-preserve-attrs"
-                    <> help "Whether to preserve attrs by passing -AXUN"
-                )
+          <*> switch
+            ( long "rsync-no-basic-options"
+                <> help "Do not pass -a (and possibly other basic options)"
+            )
+          <*> switch
+            ( long "rsync-no-delete"
+                <> help "Do not pass --delete"
+            )
+          <*> switch
+            ( long "rsync-preserve-attrs"
+                <> help "Preserve all attributes (i.e., pass -AXUNHE)"
             )
           <*> optional
             ( option
