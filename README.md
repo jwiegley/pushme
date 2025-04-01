@@ -1,6 +1,6 @@
 [pushme](https://github.com/jwiegley/pushme) is a wrapper around
-[rsync](https://en.wikipedia.org/wiki/Rsync) that allows declaration of
-multiple filesets to be transferred between machines.
+[rsync](https://en.wikipedia.org/wiki/Rsync) that allows declarative filesets
+to be transferred between machines.
 
 Filesets are declared, one per file, in the directory
 `~/.config/pushme/filesets`. An exhaustive set of options are given in the
