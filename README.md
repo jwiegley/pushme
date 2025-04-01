@@ -7,9 +7,6 @@ Filesets are declared, one per file, in the directory
 following `src.yaml` example:
 
 ```
-# The `src` fileset is transferred when I use the following command:
-#   pushme hera@24 clio@10 athena@8 tank@1
-
 # Filesets can be specifically named using -f name1,name2,…
 Name:     'src'
 # Filesets are transmitted in priority order
