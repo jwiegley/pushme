@@ -54,10 +54,10 @@ instance Semigroup RsyncOptions where
         (b2 || b1)
         (c2 || c1)
         (d2 || d1)
-        (e1 || e2)
-        (f1 <|> f2)
-        (g1 <|> g2)
-        (h1 && h2)
+        (e2 || e1)
+        (f2 <|> f1)
+        (g2 <|> g1)
+        (h2 && h1)
 
 makeLenses ''RsyncOptions
 
@@ -91,12 +91,12 @@ instance Semigroup Options where
     <> Options a2 b2 c2 d2 e2 f2 g2 h2 =
       Options
         a2
-        (b1 || b2)
+        (b2 || b1)
         (c2 <|> c1)
         (d2 <|> d1)
-        (e1 || e2)
-        (f1 || f2)
-        (g1 <> g2)
+        (e2 || e1)
+        (f2 || f1)
+        (g2 <> g1)
         (h2 <|> h1)
 
 makeLenses ''Options
