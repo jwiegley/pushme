@@ -4,7 +4,7 @@ be transferred between machines.
 
 Filesets are declared, one per file, in the directory
 `~/.config/pushme/filesets`. An exhaustive set of options are given in the
-following example:
+following `src.yaml` example:
 
 ```
 # The `src` fileset is transferred when I use the following command:
