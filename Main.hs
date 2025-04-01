@@ -21,11 +21,11 @@ import Control.Lens
 import Control.Logging
 import Control.Monad (guard, unless, when)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
+import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT, withReaderT)
 import Data.Aeson hiding (Options)
 import Data.Aeson.Types (Parser)
 import Data.Function (on)
-import Data.List (foldl', sortOn)
+import Data.List (foldl', sortOn, (\\))
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
@@ -79,6 +79,7 @@ decodeEnrichedOptions m =
                 <*> (fromMaybe False <$> parseM (m ^. at "NoBasicOptions"))
                 <*> (fromMaybe False <$> parseM (m ^. at "NoDelete"))
                 <*> (fromMaybe False <$> parseM (m ^. at "PreserveAttrs"))
+                <*> (fromMaybe False <$> parseM (m ^. at "ProtectTopLevel"))
                 <*> parseM (m ^. at "Options")
                 <*> parseM (m ^. at "ReceiveFrom")
                 <*> (fromMaybe True <$> parseM (m ^. at "Active"))
@@ -296,15 +297,7 @@ syncStores bnd src dest roDest = do
       <$> checkDirectory bnd l False
       <*> checkDirectory bnd r True
   if exists
-    then
-      invokeRsync
-        bnd
-        l
-        roDest
-        ( case remoteHost bnd of
-            Nothing -> pack r
-            Just targ -> targ ^. hostName <> ":" <> pack r
-        )
+    then invokeRsync bnd l roDest (remoteHost bnd) r
     else liftIO do
       warn $ "Either local directory missing: " <> pack l
       warn $ "OR remote directory missing: " <> pack r
@@ -312,27 +305,44 @@ syncStores bnd src dest roDest = do
     (asDirectory -> l) = src
     (asDirectory -> r) = dest
 
-invokeRsync :: Binding -> FilePath -> RsyncOptions -> Text -> App ()
-invokeRsync bnd src roDest dest = do
+invokeRsync ::
+  Binding ->
+  FilePath ->
+  RsyncOptions ->
+  Maybe Host ->
+  FilePath ->
+  App ()
+invokeRsync bnd src roDest host dest = do
   opts <- ask
-  case roDest ^. rsyncFilters of
-    Nothing -> go opts []
-    Just filters -> withSystemTempFile "filters" $ \fpath h -> do
-      liftIO do
-        T.hPutStr h filters
-        hClose h
-      when (opts ^. optsVerbose) $
-        debug' $
-          "INCLUDE FROM:\n" <> filters
-      go opts ["--include-from=" <> pack fpath]
-  where
-    go opts args =
+  withProtected $ \args1 ->
+    withFilters "Filters" (roDest ^. rsyncFilters) $ \args2 ->
       doRsync
         ( bnd ^. bindingTargetHost . hostName
             <> "/"
             <> bnd ^. bindingFileset . filesetName
         )
-        (rsyncArguments opts args)
+        (rsyncArguments opts (args1 ++ args2))
+  where
+    withProtected k = case host of
+      Just h | roDest ^. rsyncProtectTopLevel -> do
+        protectedFiles <- withReaderT (& optsDryRun .~ False) $ do
+          filesHere <- lsDirectory Nothing src
+          filesThere <- lsDirectory (Just h) dest
+          pure $ filesThere \\ filesHere
+        withFilters
+          "ProtectTopLevel"
+          (Just (pack (unlines (map ("- /" ++) protectedFiles))))
+          k
+      _ -> k []
+
+    withFilters label fs k = case fs of
+      Nothing -> k []
+      Just filters -> withSystemTempFile "filters" $ \fpath h -> do
+        liftIO do
+          T.hPutStr h filters
+          hClose h
+        debug' $ label <> ":\n" <> filters
+        k ["--include-from=" <> pack fpath]
 
     rsyncArguments :: Options -> [Text] -> [Text]
     rsyncArguments opts args =
@@ -347,9 +357,9 @@ invokeRsync bnd src roDest dest = do
         <> args
         <> fromMaybe [] (roDest ^. rsyncOptions)
         <> [ pack src,
-             if ":" `T.isInfixOf` dest
-               then T.intercalate "\\ " (T.words dest)
-               else dest
+             case host ^? _Just . hostName of
+               Nothing -> pack dest
+               Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack dest))
            ]
 
 doRsync :: Text -> [Text] -> App ()
@@ -490,6 +500,11 @@ expandFilesetPaths fs =
 
 directoryContents :: FilePath -> IO [FilePath]
 directoryContents p = map (p </>) <$> listDirectory p
+
+lsDirectory :: Maybe Host -> FilePath -> App [FilePath]
+lsDirectory mhost path = do
+  (_ec, _secs, output) <- execute mhost "ls" ["-1ap", path]
+  pure $ lines output \\ ["./", "../"]
 
 asDirectory :: FilePath -> FilePath
 asDirectory (pack -> fp) =

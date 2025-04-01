@@ -26,6 +26,7 @@ data RsyncOptions = RsyncOptions
     _rsyncNoBasicOptions :: Bool,
     _rsyncNoDelete :: Bool,
     _rsyncPreserveAttrs :: Bool,
+    _rsyncProtectTopLevel :: Bool,
     _rsyncOptions :: Maybe [Text],
     _rsyncReceiveFrom :: Maybe [Text],
     _rsyncActive :: Bool
@@ -39,22 +40,24 @@ instance FromJSON RsyncOptions where
       <*> v .:? "NoBasicOptions" .!= False
       <*> v .:? "NoDelete" .!= False
       <*> v .:? "PreserveAttrs" .!= False
+      <*> v .:? "ProtectTopLevel" .!= False
       <*> v .:? "Options"
       <*> v .:? "ReceiveFrom"
       <*> v .:? "Active" .!= True
   parseJSON _ = errorL "Error parsing Rsync"
 
 instance Semigroup RsyncOptions where
-  RsyncOptions a1 b1 c1 d1 e1 f1 g1
-    <> RsyncOptions a2 b2 c2 d2 e2 f2 g2 =
+  RsyncOptions a1 b1 c1 d1 e1 f1 g1 h1
+    <> RsyncOptions a2 b2 c2 d2 e2 f2 g2 h2 =
       RsyncOptions
         (a2 <|> a1)
         (b2 || b1)
         (c2 || c1)
         (d2 || d1)
-        (e2 <|> e1)
-        (f2 <|> f1)
-        (g1 && g2)
+        (e1 || e2)
+        (f1 <|> f2)
+        (g1 <|> g2)
+        (h1 && h2)
 
 makeLenses ''RsyncOptions
 
@@ -73,13 +76,13 @@ data Options = Options
 instance FromJSON Options where
   parseJSON (Object v) =
     Options
-      <$> v .:? "config" .!= "~/.config/pushme"
-      <*> v .:? "dryRun" .!= False
-      <*> v .:? "filesets"
-      <*> v .:? "classes"
-      <*> v .:? "siUnits" .!= False
-      <*> v .:? "verbose" .!= False
-      <*> v .:? "rsyncOptions"
+      <$> v .:? "Config" .!= "~/.config/pushme"
+      <*> v .:? "DryRun" .!= False
+      <*> v .:? "Filesets"
+      <*> v .:? "Classes"
+      <*> v .:? "SIUnits" .!= False
+      <*> v .:? "Verbose" .!= False
+      <*> v .:? "GlobalOptions"
       <*> pure []
   parseJSON _ = errorL "Error parsing Options"
 
@@ -159,6 +162,10 @@ pushmeOpts =
           <*> switch
             ( long "rsync-preserve-attrs"
                 <> help "Preserve all attributes (i.e., pass -AXUNHE)"
+            )
+          <*> switch
+            ( long "rsync-protect-top-level"
+                <> help "Protect top-level items from deletion"
             )
           <*> optional
             ( option
