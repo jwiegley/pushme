@@ -22,8 +22,7 @@ Stores:
     # The remote pathname on `hera` where this fileset resides
     Path: /Users/johnw/src
 
-    # Filters passed to rsync whenever transferring TO `hera`, and also
-    # if transferring FROM `hera` and the target does not specify its own.
+    # Filters passed to rsync whenever transferring TO `hera`
     Filters: |
       - *~
     # If NoBasicOptions is set, then `-a` is not passed to `rsync`
