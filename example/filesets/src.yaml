@@ -37,7 +37,6 @@ Common:
   Filters: |
     - *.agdai
     - *.d
-    - *.db
     - *.glob
     - *.hi
     - *.o

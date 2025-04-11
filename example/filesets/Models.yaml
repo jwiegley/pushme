@@ -4,11 +4,20 @@ Classes:
   - 'large'
 
 Stores:
+  clio:
+    Path: ~/Models
+    ReceiveFrom: []
+
   hera:
-    Path: ~/.local/share/ollama/models
+    Path: ~/Models
     ReceiveFrom: []
 
   tank:
     Path: /Volumes/tank/Models
+    NoDelete: true
+    Options:
+      - "--fuzzy"
+      - "--hard-links"
+      - "--delete-before"
     ReceiveFrom:
       - hera

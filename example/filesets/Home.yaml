@@ -48,6 +48,7 @@ Stores:
       - /.config/zsh/.zprofile
       - /.config/zsh/.zshenv
       - /.config/zsh/.zshrc
+      - /.config/zsh/history
       - /.config/zsh/plugins/iterm2_shell_integration
       + /.local/
       - /.local/.vivaldi_reporting_data
@@ -192,6 +193,7 @@ Stores:
       - /Machines/
       - /Media
       - /Mobile
+      - /Models/
       - /Movies/
       - /Music/
       - /Photos
