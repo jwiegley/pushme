@@ -25,7 +25,7 @@ import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT, withReaderT)
 import Data.Aeson hiding (Options)
 import Data.Aeson.Types (Parser)
 import Data.Function (on)
-import Data.List (foldl', sortOn, (\\))
+import Data.List (foldl', isSuffixOf, sortOn, (\\))
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
@@ -507,11 +507,9 @@ lsDirectory mhost path = do
   pure $ lines output \\ ["./", "../"]
 
 asDirectory :: FilePath -> FilePath
-asDirectory (pack -> fp) =
-  unpack $
-    if T.null fp || T.last fp /= '/'
-      then T.append fp "/"
-      else fp
+asDirectory fp
+  | "/" `isSuffixOf` fp = fp
+  | otherwise = fp <> "/"
 
 collect :: (Ord b) => (a -> b) -> [a] -> Map b [a]
 collect f =
