@@ -68,6 +68,7 @@ data Options = Options
     _optsClasses :: Maybe [Text],
     _optsSiUnits :: Bool,
     _optsVerbose :: Bool,
+    _optsNoColor :: Bool,
     _optsRsyncOpts :: Maybe RsyncOptions,
     _optsCliArgs :: [String]
   }
@@ -82,13 +83,14 @@ instance FromJSON Options where
       <*> v .:? "Classes"
       <*> v .:? "SIUnits" .!= False
       <*> v .:? "Verbose" .!= False
+      <*> v .:? "NoColor" .!= False
       <*> v .:? "GlobalOptions"
       <*> pure []
   parseJSON _ = errorL "Error parsing Options"
 
 instance Semigroup Options where
-  Options _a1 b1 c1 d1 e1 f1 g1 h1
-    <> Options a2 b2 c2 d2 e2 f2 g2 h2 =
+  Options _a1 b1 c1 d1 e1 f1 g1 h1 i1
+    <> Options a2 b2 c2 d2 e2 f2 g2 h2 i2 =
       Options
         a2
         (b2 || b1)
@@ -96,8 +98,9 @@ instance Semigroup Options where
         (d2 <|> d1)
         (e2 || e1)
         (f2 || f1)
-        (g2 <> g1)
-        (h2 <|> h1)
+        (g2 || g1)
+        (h2 <> h1)
+        (i2 <|> i1)
 
 makeLenses ''Options
 
@@ -142,6 +145,10 @@ pushmeOpts =
       ( short 'v'
           <> long "verbose"
           <> help "Report progress verbosely"
+      )
+    <*> switch
+      ( long "no-color"
+          <> help "Do not use ANSI colors in report output"
       )
     <*> optional
       ( RsyncOptions

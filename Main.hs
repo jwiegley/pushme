@@ -388,20 +388,30 @@ doRsync label args = do
             den = (\x -> if x then 1000 else 1024) $ opts ^. optsSiUnits
         log' $
           label
-            <> ": \ESC[35m"
-            <> humanReadable den (fromMaybe 0 xfer)
-            <> "\ESC[0m\ESC[36m in "
-            <> commaSep (fromIntegral (fromMaybe 0 sent))
-            <> "\ESC[0m ("
+            <> ": "
+            <> purple
+              (opts ^. optsNoColor)
+              (humanReadable den (fromMaybe 0 xfer))
+            <> cyan
+              (opts ^. optsNoColor)
+              (" in " <> commaSep (fromIntegral (fromMaybe 0 sent)))
+            <> " ("
             <> humanReadable den (fromMaybe 0 total)
             <> " in "
             <> commaSep (fromIntegral (fromMaybe 0 files))
-            <> ") \ESC[32m["
-            <> tshow (round diff :: Int)
-            <> "s]\ESC[0m"
+            <> ") "
+            <> green
+              (opts ^. optsNoColor)
+              (tshow (round diff :: Int) <> "s]")
   where
     field :: Text -> M.Map Text Text -> Maybe Integer
     field x = fmap (read . unpack) . M.lookup x
+
+    colored True _ s = s
+    colored False n s = "\ESC[" <> tshow (n :: Int) <> "m" <> s <> "\ESC[0m"
+    purple b = colored b 35
+    cyan b = colored b 36
+    green b = colored b 32
 
     commaSep :: Int -> Text
     commaSep =
