@@ -402,7 +402,7 @@ doRsync label args = do
             <> ") "
             <> green
               (opts ^. optsNoColor)
-              (tshow (round diff :: Int) <> "s]")
+              ("[" <> tshow (round diff :: Int) <> "s]")
   where
     field :: Text -> M.Map Text Text -> Maybe Integer
     field x = fmap (read . unpack) . M.lookup x
