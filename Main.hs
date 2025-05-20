@@ -21,7 +21,7 @@ import Control.Lens
 import Control.Logging
 import Control.Monad (guard, unless, when)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT, withReaderT)
+import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
 import Data.Aeson hiding (Options)
 import Data.Aeson.Types (Parser)
 import Data.Function (on)
@@ -323,17 +323,10 @@ invokeRsync bnd src roDest host dest = do
         )
         (rsyncArguments opts (args1 ++ args2))
   where
-    withProtected k = case host of
-      Just h | roDest ^. rsyncProtectTopLevel -> do
-        protectedFiles <- withReaderT (& optsDryRun .~ False) $ do
-          filesHere <- lsDirectory Nothing src
-          filesThere <- lsDirectory (Just h) dest
-          pure $ filesThere \\ filesHere
-        withFilters
-          "ProtectTopLevel"
-          (Just (pack (unlines (map ("- /" ++) protectedFiles))))
-          k
-      _ -> k []
+    withProtected k
+      | roDest ^. rsyncProtectTopLevel =
+          k ["--filter", "P /*"]
+      | otherwise = k []
 
     withFilters label fs k = case fs of
       Nothing -> k []
@@ -342,7 +335,7 @@ invokeRsync bnd src roDest host dest = do
           T.hPutStr h filters
           hClose h
         debug' $ label <> ":\n" <> filters
-        k ["--include-from=" <> pack fpath]
+        k ["--include-from", pack fpath]
 
     rsyncArguments :: Options -> [Text] -> [Text]
     rsyncArguments opts args =
