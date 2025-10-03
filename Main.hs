@@ -184,10 +184,21 @@ processBindings = do
             <> " receiving jobs"
         newQSem (there ^. hostMaxJobs)
       parallel_ do
-        (bnds, thereSlots) <- zip (M.elems bindings) thereSlotsAll
-        map (go opts hereSlots thereSlots) bnds
+        (bnds, thereSlots) <- zip (M.toList bindings) thereSlotsAll
+        pure (goHost opts hereSlots thereSlots bnds)
     _ -> log' "Usage: pushme FROM TO..."
   where
+    -- Process all bindings for a single destination host
+    goHost opts p q (there, bnds) = do
+      -- Process all bindings for this host in parallel
+      parallel_ (map (go opts p q) bnds)
+      -- After all bindings for this host are done, print completion message
+      when (not (null bnds)) $ do
+        let msg = there ^. hostName <> " done"
+        log' $ if opts ^. optsNoColor
+               then msg
+               else "\ESC[32m" <> msg <> "\ESC[0m"
+
     go opts p q bnd =
       bracket_ (waitQSem p) (signalQSem p) $
         bracket_ (waitQSem q) (signalQSem q) $
