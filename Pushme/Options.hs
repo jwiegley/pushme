@@ -12,10 +12,10 @@ import qualified Data.Text as T
 import Options.Applicative hiding (Success)
 
 version :: String
-version = "2.0.0.1"
+version = "3.0.0"
 
 copyright :: String
-copyright = "2013-4"
+copyright = "2013-2025"
 
 pushmeSummary :: String
 pushmeSummary =
