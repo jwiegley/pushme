@@ -1,6 +1,6 @@
 name:       pushme
 version:    3.0.0
-synopsis:   Tool to synchronize directories with rsync, zfs or git-annex
+synopsis:   Synchronize multiple filesets across machines using rsync
 github:     jwiegley/pushme
 author:     John Wiegley
 maintainer: johnw@newartisans.com
@@ -8,39 +8,41 @@ category:   System
 license:    BSD3
 
 description:
-  Script I use for synchronizing data among machines.
+  pushme is a wrapper around rsync allowing declarative filesets to be
+  transferred between machines. The screenshot above shows pushme in action
+  (where `push` is a script I use to call `pushme` with appropriate arguments
+  based on which machine I'm running it from).
 
 ghc-options:
   - -Wall
   - -Wno-missing-home-modules
-  - -fprof-auto
 
 dependencies:
-  - base                 >= 4.7
-  - aeson
-  - bytestring           >= 0.10
-  - containers           >= 0.6
-  - directory
-  - filepath
-  - foldl
-  - lens                 >= 4.9
-  - logging              >= 3.0.6
-  - monad-logger         >= 0.3
-  - old-locale           >= 1.0
-  - optparse-applicative >= 0.10
-  - parallel-io          >= 0.3
-  - pretty-show          >= 1.10
-  - process              >= 1.6
-  - regex-posix          >= 0.95
-  - system-fileio        >= 0.3
-  - system-filepath      >= 0.4
-  - temporary            >= 1.2
-  - text                 >= 1.2
-  - time                 >= 1.4
-  - transformers         >= 0.3
-  - unix                 >= 2.6
-  - unordered-containers >= 0.2
-  - yaml
+  - base                 >= 4.7    && < 4.21
+  - aeson                >= 1.0    && < 2.3
+  - bytestring           >= 0.10   && < 0.13
+  - containers           >= 0.6    && < 0.8
+  - directory            >= 1.2    && < 1.4
+  - filepath             >= 1.4    && < 1.6
+  - foldl                >= 1.4    && < 1.5
+  - lens                 >= 4.9    && < 5.4
+  - logging              >= 3.0.6  && < 3.1
+  - monad-logger         >= 0.3    && < 0.4
+  - old-locale           >= 1.0    && < 1.1
+  - optparse-applicative >= 0.10   && < 0.19
+  - parallel-io          >= 0.3    && < 0.4
+  - pretty-show          >= 1.10   && < 1.11
+  - process              >= 1.6    && < 1.7
+  - regex-posix          >= 0.95   && < 0.97
+  - system-fileio        >= 0.3    && < 0.4
+  - system-filepath      >= 0.4    && < 0.5
+  - temporary            >= 1.2    && < 1.4
+  - text                 >= 1.2    && < 2.2
+  - time                 >= 1.4    && < 1.15
+  - transformers         >= 0.3    && < 0.7
+  - unix                 >= 2.6    && < 2.9
+  - unordered-containers >= 0.2    && < 0.3
+  - yaml                 >= 0.11   && < 0.12
 
 extra-source-files:
   - README.md
