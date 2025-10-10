@@ -1,6 +1,10 @@
 [pushme](https://github.com/jwiegley/pushme) is a wrapper around
 [rsync](https://en.wikipedia.org/wiki/Rsync) allowing declarative filesets to
-be transferred between machines.
+be transferred between machines. Here is what it looks like in action (where
+`push` is a script I use to call `pushme` with appropriate arguments based on
+which machine I’m running it from):
+
+![Image of pushme in operation](./pushall-example.jpg)
 
 Filesets are declared, one per file, in the directory
 `~/.config/pushme/filesets`. An exhaustive set of options are given in the
