@@ -15,6 +15,7 @@ Stores:
     ReceiveFrom: []
   
   tank:
-    Path: /Volumes/tank/Documents
+    Path: /tank/Documents
     ReceiveFrom:
       - hera
+      - clio

@@ -9,6 +9,8 @@ Stores:
     ReceiveFrom: []
 
   tank:
-    Path: /Volumes/tank/Pictures
+    Path: /tank/Pictures
     ReceiveFrom:
       - hera
+    Filters: |
+      - /Photos Library.photoslibrary/database/search/Spotlight/

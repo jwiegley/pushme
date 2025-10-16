@@ -15,6 +15,7 @@ Stores:
     ReceiveFrom: []
   
   tank:
-    Path: /Volumes/tank/Desktop
+    Path: /tank/Desktop
     ReceiveFrom:
       - hera
+      - clio

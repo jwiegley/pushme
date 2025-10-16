@@ -9,6 +9,6 @@ Stores:
     ReceiveFrom: []
 
   tank:
-    Path: /Volumes/tank/Movies
+    Path: /tank/Movies
     ReceiveFrom:
       - hera

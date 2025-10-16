@@ -1,20 +1,23 @@
-Name:     'Models'
+Name:     'HuggingFace'
 Priority: 110
 Classes:
   - 'large'
 
 Stores:
   clio:
-    Path: ~/Models
+    Path: ~/.cache/huggingface/hub
     ReceiveFrom: []
 
   hera:
-    Path: ~/Models
+    Path: ~/.cache/huggingface/hub
     ReceiveFrom: []
 
   tank:
-    Path: /tank/Models/Llama.cpp
+    Path: /tank/Models/HuggingFace
     ProtectTopLevel: true
+    Filters: |
+      - /.locks/
+      - /version.txt
     Options:
       - "--hard-links"
     ReceiveFrom:

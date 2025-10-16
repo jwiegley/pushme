@@ -15,12 +15,7 @@ Stores:
       - hera
   
   tank:
-    Path: /Volumes/tank/Downloads
-    ReceiveFrom:
-      - hera
-
-  vulcan:
-    Path: /Users/johnw/Downloads
+    Path: /tank/Downloads
     ReceiveFrom:
       - hera
       - clio

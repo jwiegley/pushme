@@ -76,9 +76,20 @@ Stores:
       - /.local/share/vagrant/
       - /.local/share/ykman/
       - /.local/state/
+      + /.claude/
+      + /.claude.json
+      + /.claude.json.backup
+      + /.eask/
+      - /.matplotlib/
+      - /.npm/
+      - /.pdf-filler-profiles/
+      - /.sniffly/
       + /.ssh/
       - /.ssh/config
+      - /.tlaplus/
       + /.usr_app_ncr.dat
+      + /.viminfo
+      - /.z
       + /Library/
       + /Library/Application Support/
       + /Library/Application Support/Affinity Photo 2/
@@ -86,6 +97,12 @@ Stores:
       + /Library/Application Support/Anki2/
       + /Library/Application Support/audacity/
       + /Library/Application Support/Choosy/
+      + /Library/Application Support/DEVONthink/
+      + /Library/Application Support/DEVONthink/Inbox*/
+      - /Library/Application Support/DEVONthink/*
+      - /Library/Application Support/DEVONthink/*/
+      - /Library/Application Support/DEVONthink/.*
+      - /Library/Application Support/DEVONthink/.*/
       + /Library/Application Support/DEVONthink 3/
       + /Library/Application Support/DEVONthink 3/Inbox*/
       - /Library/Application Support/DEVONthink 3/*
@@ -152,9 +169,11 @@ Stores:
       - clio
 
   tank:
-    Path: /Volumes/tank/Home
+    Path: /tank/Home
     Filters: |
       - /.Spotlight-V100/
+      - /.Trash/
+      - /.cache/
       - /.local/share/cabal/
       - /.local/share/cargo/
       - /.local/share/chainweb*
@@ -169,15 +188,20 @@ Stores:
       - /.local/share/ollama/
       - /.local/share/rustup/
       - /.local/share/vagrant/
+      - /.local/share/Trash/
       - /Applications/
       - /Athena
       - /Audio
+      - /Databases/
       - /Desktop/
       - /Documents/
       - /Downloads/
       - /Drafts
+      - /Hera
       - /Inbox
+      - /Library/Application Support/CloudDocs/
       - /Library/Application Support/FileProvider/
+      - /Library/Application Support/Steam/steamapps/common/
       - /Library/Biome/
       - /Library/Caches/
       - /Library/CloudStorage/
@@ -188,6 +212,7 @@ Stores:
       - /Library/Group Containers/
       - /Library/Mail/
       - /Library/Metadata/
+      - /Library/PersonalizationPortrait/
       - /Library/Thunderbird/
       - /Library/Trial/
       - /Machines/
@@ -201,6 +226,7 @@ Stores:
       - /Products/
       - /Public/
       - /Video
+      - /Vulcan
       - /_Archived Items
       - /dl
       - /doc/
@@ -211,12 +237,6 @@ Stores:
       - /athena/
       - /clio/
       - /hera/
-      - /vulcan/
-    ReceiveFrom:
-      - hera
-
-  vulcan:
-    Path: '~'
     ReceiveFrom:
       - hera
       - clio
@@ -291,12 +311,12 @@ Common:
     + /Library/Application Support/Anki2/
     + /Library/Application Support/audacity/
     + /Library/Application Support/Choosy/
-    + /Library/Application Support/DEVONthink 3/
-    + /Library/Application Support/DEVONthink 3/Inbox*/
-    - /Library/Application Support/DEVONthink 3/*
-    - /Library/Application Support/DEVONthink 3/*/
-    - /Library/Application Support/DEVONthink 3/.*
-    - /Library/Application Support/DEVONthink 3/.*/
+    + /Library/Application Support/DEVONthink/
+    + /Library/Application Support/DEVONthink/Inbox*/
+    - /Library/Application Support/DEVONthink/*
+    - /Library/Application Support/DEVONthink/*/
+    - /Library/Application Support/DEVONthink/.*
+    - /Library/Application Support/DEVONthink/.*/
     - /Library/Application Support/DiffusionBee/
     - /Library/Application Support/Dungeon Crawl Stone Soup/
     + /Library/Application Support/ExpanDrive/
@@ -334,6 +354,7 @@ Common:
     + /Library/Preferences/com.acqualia.soulver.plist
     + /Library/Preferences/com.choosyosx.Choosy.plist
     + /Library/Preferences/com.diffusionbee.diffusionbee.plist
+    + /Library/Preferences/com.devon-technologies.think3.plist
     + /Library/Preferences/com.gog.*
     + /Library/Preferences/com.googlecode.iterm2.plist
     + /Library/Preferences/com.googlecode.iterm2.private.plist

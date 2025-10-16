@@ -1,0 +1,10 @@
+Name:     'Backups'
+Priority: 1000
+Classes:
+  - 'large'
+
+Stores:
+  tank:
+    Path: /tank/Backups/Misc
+    ProtectTopLevel: true
+    ReceiveFrom: []

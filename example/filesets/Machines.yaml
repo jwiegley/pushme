@@ -13,13 +13,9 @@ Stores:
     ReceiveFrom: []
 
   tank:
-    Path: /Volumes/tank/Machines
+    Path: /tank/Machines
     ReceiveFrom:
       - hera
-
-  vulcan:
-    Path: /Users/johnw/Machines
-    ReceiveFrom: []
 
 Common:
   ProtectTopLevel: true

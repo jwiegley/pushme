@@ -9,6 +9,6 @@ Stores:
     ReceiveFrom: []
 
   tank:
-    Path: /Volumes/tank/Music
+    Path: /tank/Music
     ReceiveFrom:
       - hera

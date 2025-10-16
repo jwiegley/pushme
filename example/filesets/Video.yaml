@@ -4,13 +4,7 @@ Classes:
   - 'large'
 
 Stores:
-  hera:
-    Path: /Volumes/ext/Video
-    ReceiveFrom: []
-
   tank:
-    Path: /Volumes/tank/Video
+    Path: /tank/Video
     Filters: |
       - /Zoom/
-    ReceiveFrom:
-      - hera

@@ -23,13 +23,7 @@ Stores:
       - /*.dtBase2/Backup*
 
   tank:
-    Path: /Volumes/tank/doc
-    ReceiveFrom:
-      - hera
-      - clio
-
-  vulcan:
-    Path: /Users/johnw/doc
+    Path: /tank/doc
     ReceiveFrom:
       - hera
       - clio

@@ -21,63 +21,10 @@ Stores:
       - clio
 
   tank:
-    Path: /Volumes/tank/kadena
-    ReceiveFrom:
-      - hera
-
-  vulcan:
-    Path: /Users/johnw/kadena
+    Path: /tank/kadena
     ReceiveFrom:
       - hera
       - clio
-
-  deimos:
-    Path: /home/johnw/kadena
-    Filters: |
-      + /chainweb-node/
-      - /chainweb-node/.envrc*
-      - /chainweb-node/dist/
-      - /chainweb-node/dist-newstyle/
-      - /chainweb-node/result*
-      - /*
-      - /*/
-      - /.*
-      - /.*/
-    ReceiveFrom:
-      - vulcan
-      - hermes
-
-  phobos:
-    Path: /home/johnw/kadena
-    Filters: |
-      + /chainweb-node/
-      - /chainweb-node/.envrc*
-      - /chainweb-node/dist/
-      - /chainweb-node/dist-newstyle/
-      - /chainweb-node/result*
-      - /*
-      - /*/
-      - /.*
-      - /.*/
-    ReceiveFrom:
-      - vulcan
-      - hermes
-
-  neso:
-    Path: /home/johnw/kadena
-    Filters: |
-      + /chainweb-node/
-      - /chainweb-node/.envrc*
-      - /chainweb-node/dist/
-      - /chainweb-node/dist-newstyle/
-      - /chainweb-node/result*
-      - /*
-      - /*/
-      - /.*
-      - /.*/
-    ReceiveFrom:
-      - vulcan
-      - hermes
 
 Common:
   Filters: |
@@ -108,6 +55,7 @@ Common:
     - cabal.project.local*
     - dist-newstyle/
     - dist/
+    - node_modules/
     - result
     - result-*
     - target/

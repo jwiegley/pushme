@@ -9,6 +9,6 @@ Stores:
     ReceiveFrom: []
 
   tank:
-    Path: /Volumes/tank/Photos
+    Path: /tank/Photos
     ReceiveFrom:
       - hera

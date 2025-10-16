@@ -22,13 +22,7 @@ Stores:
       - clio
 
   tank:
-    Path: /Volumes/tank/src
-    ReceiveFrom:
-      - hera
-      - clio
-
-  vulcan:
-    Path: /Users/johnw/src
+    Path: /tank/src
     ReceiveFrom:
       - hera
       - clio
@@ -55,13 +49,15 @@ Common:
     - .ghc.*
     - .vagrant/
     - .venv/
+    - /dot-emacs/.cache/
+    - /dot-emacs/eln-cache/
     - MAlonzo/
     - Makefile.coq
     - Makefile.coq.conf
     - cabal.project.local*
     - dist-newstyle/
     - dist/
+    - node_modules/
     - result
     - result-*
     - target/
-    - /dot-emacs/eln-cache

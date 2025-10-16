@@ -1,0 +1,21 @@
+Name:     'Databases'
+Priority: 10
+Classes:
+  - 'large'
+
+Stores:
+  hera:
+    Path: /Users/johnw/Databases
+    ReceiveFrom:
+      - clio
+
+  clio:
+    Path: /Users/johnw/Databases
+    ReceiveFrom:
+      - hera
+
+  tank:
+    Path: /tank/Databases
+    ReceiveFrom:
+      - hera
+      - clio

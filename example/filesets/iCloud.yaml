@@ -1,0 +1,19 @@
+Name:     'iCloud'
+Priority: 10
+Classes:
+  - 'large'
+
+Stores:
+  hera:
+    Path: /Users/johnw/Library/Mobile Documents
+    ReceiveFrom: []
+
+  clio:
+    Path: /Users/johnw/Library/Mobile Documents
+    ReceiveFrom: []
+
+  tank:
+    Path: /tank/iCloud
+    ReceiveFrom:
+      - hera
+      - clio
