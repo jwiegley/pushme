@@ -14,12 +14,6 @@ Stores:
     ReceiveFrom:
       - hera
 
-  athena:
-    Path: /Users/johnw/kadena
-    ReceiveFrom:
-      - hera
-      - clio
-
   tank:
     Path: /tank/kadena
     ReceiveFrom:

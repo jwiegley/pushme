@@ -15,12 +15,6 @@ Stores:
     ReceiveFrom:
       - hera
 
-  athena:
-    Path: /Users/johnw/src
-    ReceiveFrom:
-      - hera
-      - clio
-
   tank:
     Path: /tank/src
     ReceiveFrom:
