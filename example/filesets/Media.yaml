@@ -5,6 +5,6 @@ Classes:
 
 Stores:
   tank:
-    Path: /tank/Media
+    Path: $tank/Media
     Active: false
     ReceiveFrom: []

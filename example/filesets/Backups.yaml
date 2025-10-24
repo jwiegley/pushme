@@ -5,6 +5,6 @@ Classes:
 
 Stores:
   tank:
-    Path: /tank/Backups/Misc
+    Path: $tank/Backups/Misc
     ProtectTopLevel: true
     ReceiveFrom: []

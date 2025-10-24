@@ -5,15 +5,15 @@ Classes:
 
 Stores:
   hera:
-    Path: /Users/johnw/Machines
+    Path: $home/Machines
     ReceiveFrom: []
 
   clio:
-    Path: /Users/johnw/Machines
+    Path: $home/Machines
     ReceiveFrom: []
 
   tank:
-    Path: /tank/Machines
+    Path: $tank/Machines
     ReceiveFrom:
       - hera
 

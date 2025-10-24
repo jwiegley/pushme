@@ -2,3 +2,35 @@ SIUnits: true
 GlobalOptions:
   Options:
     - "--include-from=/Users/johnw/.config/ignore.lst"
+
+Aliases:
+  # tank:
+  #   Host: vulcan
+  #   MaxJobs: 1
+  #   Variables:
+  #     tank: /tank
+
+  tank:
+    Host: hera
+    MaxJobs: 1
+    Variables:
+      tank: /Volumes/tank
+
+  hera:
+    Host: hera
+    MaxJobs: 10
+    Variables:
+      home: /Users/johnw
+      ext: /Volumes/ext
+
+  clio:
+    Host: clio
+    MaxJobs: 6
+    Variables:
+      home: /Users/johnw
+
+  vulcan:
+    Host: vulcan
+    MaxJobs: 6
+    Variables:
+      home: /home/johnw

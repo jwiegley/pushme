@@ -7,15 +7,15 @@ Classes:
 
 Stores:
   hera:
-    Path: /Users/johnw/Documents
+    Path: $home/Documents
     ReceiveFrom: []
   
   clio:
-    Path: /Users/johnw/Documents
+    Path: $home/Documents
     ReceiveFrom: []
   
   tank:
-    Path: /tank/Documents
+    Path: $tank/Documents
     ReceiveFrom:
       - hera
       - clio

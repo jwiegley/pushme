@@ -5,10 +5,10 @@ Classes:
 
 Stores:
   hera:
-    Path: /Volumes/ext/Movies
+    Path: $ext/Movies
     ReceiveFrom: []
 
   tank:
-    Path: /tank/Movies
+    Path: $tank/Movies
     ReceiveFrom:
       - hera

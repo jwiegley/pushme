@@ -5,15 +5,15 @@ Classes:
 
 Stores:
   clio:
-    Path: ~/Models
+    Path: $home/Models
     ReceiveFrom: []
 
   hera:
-    Path: ~/Models
+    Path: $home/Models
     ReceiveFrom: []
 
   tank:
-    Path: /tank/Models/Llama.cpp
+    Path: $tank/Models/Llama.cpp
     ProtectTopLevel: true
     Options:
       - "--hard-links"

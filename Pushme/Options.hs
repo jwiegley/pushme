@@ -6,8 +6,12 @@ module Pushme.Options where
 
 import Control.Lens hiding (argument)
 import Control.Logging
+import Control.Monad (forM_, when)
 import Data.Aeson hiding (Options)
-import Data.Text (Text)
+import Data.Aeson.Types (modifyFailure)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
+import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import Options.Applicative hiding (Success)
 
@@ -61,6 +65,53 @@ instance Semigroup RsyncOptions where
 
 makeLenses ''RsyncOptions
 
+-- | Alias definition for host names with optional configuration overrides
+data Alias = Alias
+  { _aliasName :: Text,
+    _aliasHost :: Text,
+    _aliasMaxJobs :: Maybe Int,
+    _aliasVariables :: Map Text Text
+  }
+  deriving (Show, Eq)
+
+instance FromJSON Alias where
+  parseJSON (Object v) = modifyFailure addContext $ do
+    -- Parse Variables if present
+    variables <- v .:? "Variables" .!= M.empty
+    -- Check for legacy Prefix field and merge it
+    legacyPrefix <- v .:? "Prefix"
+    let finalVariables = case legacyPrefix of
+          Just prefix -> M.insert "prefix" (pack prefix) variables
+          Nothing -> variables
+    -- Explicitly parse Host to provide better error message
+    mHost <- v .:? "Host"
+    host <- case mHost of
+      Nothing -> fail "Missing required field 'Host' in alias definition"
+      Just h -> pure h
+    Alias
+      <$> pure ""  -- Will be filled in from the Map key
+      <*> pure host
+      <*> v .:? "MaxJobs"
+      <*> pure finalVariables
+    where
+      addContext msg = "Error parsing Alias: " ++ msg
+  parseJSON _ = errorL "Error parsing Alias"
+
+makeLenses ''Alias
+
+-- Note: Host type is defined in Main.hs as:
+-- data Host = Host { _hostName :: Text, _hostMaxJobs :: Int }
+
+-- | Host reference combining logical name (for fileset matching) with actual host details
+data HostRef = HostRef
+  { _hostRefLogicalName :: Text,
+    _hostRefActualHost :: (Text, Int),  -- (hostName, maxJobs) - avoiding circular dependency
+    _hostRefVariables :: Map Text Text
+  }
+  deriving (Show, Eq, Ord)
+
+makeLenses ''HostRef
+
 data Options = Options
   { _optsConfigDir :: FilePath,
     _optsDryRun :: Bool,
@@ -70,12 +121,20 @@ data Options = Options
     _optsVerbose :: Bool,
     _optsNoColor :: Bool,
     _optsRsyncOpts :: Maybe RsyncOptions,
+    _optsAliases :: Map Text Alias,
     _optsCliArgs :: [String]
   }
   deriving (Show, Eq)
 
 instance FromJSON Options where
-  parseJSON (Object v) =
+  parseJSON (Object v) = do
+    aliasMap <- v .:? "Aliases" .!= M.empty
+    -- Fill in the _aliasName field from the Map keys
+    let aliasMapWithNames = M.mapWithKey (\k a -> a {_aliasName = k}) aliasMap
+    -- Validate that all aliases have a non-empty Host field
+    forM_ (M.toList aliasMapWithNames) $ \(name, alias) ->
+      when (T.null (alias ^. aliasHost)) $
+        fail $ "Alias '" ++ unpack name ++ "' is missing required field 'Host'"
     Options
       <$> v .:? "Config" .!= "~/.config/pushme"
       <*> v .:? "DryRun" .!= False
@@ -85,12 +144,13 @@ instance FromJSON Options where
       <*> v .:? "Verbose" .!= False
       <*> v .:? "NoColor" .!= False
       <*> v .:? "GlobalOptions"
+      <*> pure aliasMapWithNames
       <*> pure []
   parseJSON _ = errorL "Error parsing Options"
 
 instance Semigroup Options where
-  Options _a1 b1 c1 d1 e1 f1 g1 h1 i1
-    <> Options a2 b2 c2 d2 e2 f2 g2 h2 i2 =
+  Options _a1 b1 c1 d1 e1 f1 g1 h1 i1 j1
+    <> Options a2 b2 c2 d2 e2 f2 g2 h2 i2 j2 =
       Options
         a2
         (b2 || b1)
@@ -100,7 +160,8 @@ instance Semigroup Options where
         (f2 || f1)
         (g2 || g1)
         (h2 <> h1)
-        (i2 <|> i1)
+        (i2 <> i1)  -- Right-biased merge: right Map wins on key conflicts
+        (j2 <|> j1)
 
 makeLenses ''Options
 
@@ -184,6 +245,7 @@ pushmeOpts =
           <*> pure Nothing
           <*> pure True
       )
+    <*> pure M.empty  -- Aliases come from config file, not CLI
     <*> many (argument (eitherReader Right) (metavar "ARGS"))
 
 optionsDefinition :: ParserInfo Options

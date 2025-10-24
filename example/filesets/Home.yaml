@@ -5,17 +5,17 @@ Classes:
 
 Stores:
   hera:
-    Path: '~'
+    Path: $home
     ReceiveFrom:
       - clio
 
   clio:
-    Path: '~'
+    Path: $home
     ReceiveFrom:
       - hera
 
   tank:
-    Path: /tank/Home
+    Path: $tank/Home
     Filters: |
       - /.Spotlight-V100/
       - /.Trash/

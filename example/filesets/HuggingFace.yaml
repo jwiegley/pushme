@@ -5,15 +5,15 @@ Classes:
 
 Stores:
   clio:
-    Path: ~/.cache/huggingface/hub
+    Path: $home/.cache/huggingface/hub
     ReceiveFrom: []
 
   hera:
-    Path: ~/.cache/huggingface/hub
+    Path: $home/.cache/huggingface/hub
     ReceiveFrom: []
 
   tank:
-    Path: /tank/Models/HuggingFace
+    Path: $tank/Models/HuggingFace
     ProtectTopLevel: true
     Filters: |
       - /.locks/

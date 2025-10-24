@@ -5,15 +5,15 @@ Classes:
 
 Stores:
   hera:
-    Path: /Users/johnw/Library/Mobile Documents
+    Path: $home/Library/Mobile Documents
     ReceiveFrom: []
 
   clio:
-    Path: /Users/johnw/Library/Mobile Documents
+    Path: $home/Library/Mobile Documents
     ReceiveFrom: []
 
   tank:
-    Path: /tank/iCloud
+    Path: $tank/iCloud
     ReceiveFrom:
       - hera
       - clio

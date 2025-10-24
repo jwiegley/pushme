@@ -5,18 +5,18 @@ Classes:
 
 Stores:
   hera:
-    Path: /Users/johnw/src
+    Path: $home/src
     PreserveAttrs: true
     ReceiveFrom:
       - clio
 
   clio:
-    Path: /Users/johnw/src
+    Path: $home/src
     ReceiveFrom:
       - hera
 
   tank:
-    Path: /tank/src
+    Path: $tank/src
     ReceiveFrom:
       - hera
       - clio

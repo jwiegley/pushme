@@ -5,11 +5,11 @@ Classes:
 
 Stores:
   hera:
-    Path: /Volumes/ext/Pictures
+    Path: $ext/Pictures
     ReceiveFrom: []
 
   tank:
-    Path: /tank/Pictures
+    Path: $tank/Pictures
     ReceiveFrom:
       - hera
     Filters: |

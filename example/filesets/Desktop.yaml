@@ -7,15 +7,15 @@ Classes:
 
 Stores:
   hera:
-    Path: ~/Desktop
+    Path: $home/Desktop
     ReceiveFrom: []
   
   clio:
-    Path: ~/Desktop
+    Path: $home/Desktop
     ReceiveFrom: []
   
   tank:
-    Path: /tank/Desktop
+    Path: $tank/Desktop
     ReceiveFrom:
       - hera
       - clio

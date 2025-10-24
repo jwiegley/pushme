@@ -5,7 +5,7 @@ Classes:
 
 Stores:
   hera:
-    Path: /Users/johnw/doc
+    Path: $home/doc
     ReceiveFrom:
       - clio
     Filters: |
@@ -14,7 +14,7 @@ Stores:
       - /*.dtBase2/Backup*
 
   clio:
-    Path: /Users/johnw/doc
+    Path: $home/doc
     ReceiveFrom:
       - hera
     Filters: |
@@ -23,7 +23,7 @@ Stores:
       - /*.dtBase2/Backup*
 
   tank:
-    Path: /tank/doc
+    Path: $tank/doc
     ReceiveFrom:
       - hera
       - clio

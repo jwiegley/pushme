@@ -5,10 +5,10 @@ Classes:
 
 Stores:
   hera:
-    Path: /Volumes/ext/Audio
+    Path: $ext/Audio
     ReceiveFrom: []
 
   tank:
-    Path: /tank/Audio
+    Path: $tank/Audio
     ReceiveFrom:
       - hera

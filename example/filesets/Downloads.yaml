@@ -5,17 +5,17 @@ Classes:
 
 Stores:
   hera:
-    Path: /Users/johnw/Downloads
+    Path: $home/Downloads
     ReceiveFrom:
       - clio
 
   clio:
-    Path: /Users/johnw/Downloads
+    Path: $home/Downloads
     ReceiveFrom:
       - hera
   
   tank:
-    Path: /tank/Downloads
+    Path: $tank/Downloads
     ReceiveFrom:
       - hera
       - clio

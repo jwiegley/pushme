@@ -5,6 +5,6 @@ Classes:
 
 Stores:
   tank:
-    Path: /tank/Video
+    Path: $tank/Video
     Filters: |
       - /Zoom/
