@@ -1,0 +1,86 @@
+# Yamale schema for pushme fileset YAML files
+# Validates fileset definition files at ~/.config/pushme/filesets/*.yaml
+#
+# Usage: yamale -s fileset.schema.yaml ~/.config/pushme/filesets/example.yaml
+
+# Required: unique name for this fileset
+Name: str(required=True)
+
+# Optional: classification tags for filtering with --classes
+Classes: list(str(), required=False)
+
+# Optional: transfer priority (lower number = higher priority, default: 1000)
+Priority: int(required=False)
+
+# Required: map of host-specific configurations
+# Keys are hostnames (or logical alias names)
+# Values are Store objects with Path and optional RsyncOptions
+Stores: map(include('store'), required=True)
+
+# Optional: common rsync options applied to all stores in this fileset
+# These are merged with GlobalOptions and store-specific options
+Common: include('rsync-options', required=False)
+
+---
+# Store definition schema
+# Each store entry must have a Path and can include any RsyncOptions fields
+store:
+  # Required: path on this host
+  # Supports variable interpolation using $varname syntax (e.g., $prefix/backups)
+  Path: str(required=True)
+
+  # Optional RsyncOptions fields that can be specified per-store:
+
+  # Optional: rsync filter rules (multiline string)
+  Filters: str(required=False)
+
+  # Optional: don't pass -a flag to rsync
+  NoBasicOptions: bool(required=False)
+
+  # Optional: don't pass --delete flag to rsync
+  NoDelete: bool(required=False)
+
+  # Optional: pass -AXUNHE to preserve all attributes
+  PreserveAttrs: bool(required=False)
+
+  # Optional: add --filter "P /*" to protect top-level items
+  ProtectTopLevel: bool(required=False)
+
+  # Optional: additional flags to pass to rsync
+  Options: list(str(), required=False)
+
+  # Optional: allowed source hosts (filters transfers)
+  # If set, this store will only accept transfers from listed hosts
+  ReceiveFrom: list(str(), required=False)
+
+  # Optional: enable/disable this store (default: true)
+  # If false, this store will be skipped during sync
+  Active: bool(required=False)
+
+---
+# Reusable schema for RsyncOptions
+# Used in both Common section and implicitly within Store definitions
+rsync-options:
+  # Optional: rsync filter rules (multiline string)
+  Filters: str(required=False)
+
+  # Optional: don't pass -a flag to rsync
+  NoBasicOptions: bool(required=False)
+
+  # Optional: don't pass --delete flag to rsync
+  NoDelete: bool(required=False)
+
+  # Optional: pass -AXUNHE to preserve all attributes
+  PreserveAttrs: bool(required=False)
+
+  # Optional: add --filter "P /*" to protect top-level items
+  ProtectTopLevel: bool(required=False)
+
+  # Optional: additional flags to pass to rsync
+  Options: list(str(), required=False)
+
+  # Optional: allowed source hosts (filters transfers)
+  ReceiveFrom: list(str(), required=False)
+
+  # Optional: enable/disable this configuration (default: true)
+  Active: bool(required=False)

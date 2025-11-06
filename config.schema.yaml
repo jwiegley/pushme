@@ -1,0 +1,76 @@
+# Yamale schema for pushme config.yaml
+# Validates the main configuration file at ~/.config/pushme/config.yaml
+#
+# Usage: yamale -s config.schema.yaml ~/.config/pushme/config.yaml
+
+# Optional configuration directory path
+Config: str(required=False)
+
+# Optional dry-run mode flag
+DryRun: bool(required=False)
+
+# Optional list of fileset names to filter
+Filesets: list(str(), required=False)
+
+# Optional list of class names to filter
+Classes: list(str(), required=False)
+
+# Optional flag to use SI units (1000) instead of binary (1024) for sizes
+SIUnits: bool(required=False)
+
+# Optional verbose output flag
+Verbose: bool(required=False)
+
+# Optional flag to disable color output
+NoColor: bool(required=False)
+
+# Optional global rsync options applied to all transfers
+GlobalOptions: include('rsync-options', required=False)
+
+# Optional map of alias definitions
+# Keys are alias names, values are Alias objects
+Aliases: map(include('alias'), required=False)
+
+---
+# Reusable schema for Alias objects
+alias:
+  # Required: physical hostname (can include @N for MaxJobs, e.g., "hera@24")
+  Host: str(required=True)
+
+  # Optional: maximum parallel jobs for this host
+  MaxJobs: int(min=1, required=False)
+
+  # Optional: variable definitions for path interpolation
+  # Map of variable name to value (e.g., prefix: /Volumes/tank)
+  Variables: map(str(), required=False)
+
+  # Optional: legacy field for prefix variable (auto-mapped to Variables.prefix)
+  Prefix: str(required=False)
+
+---
+# Reusable schema for RsyncOptions
+# Used in GlobalOptions, Fileset Common, and Store definitions
+rsync-options:
+  # Optional: rsync filter rules (multiline string)
+  Filters: str(required=False)
+
+  # Optional: don't pass -a flag to rsync
+  NoBasicOptions: bool(required=False)
+
+  # Optional: don't pass --delete flag to rsync
+  NoDelete: bool(required=False)
+
+  # Optional: pass -AXUNHE to preserve all attributes
+  PreserveAttrs: bool(required=False)
+
+  # Optional: add --filter "P /*" to protect top-level items
+  ProtectTopLevel: bool(required=False)
+
+  # Optional: additional flags to pass to rsync
+  Options: list(str(), required=False)
+
+  # Optional: allowed source hosts (filters transfers)
+  ReceiveFrom: list(str(), required=False)
+
+  # Optional: enable/disable this configuration (default: true)
+  Active: bool(required=False)
