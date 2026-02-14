@@ -85,6 +85,7 @@ decodeEnrichedOptions m =
       (path,)
         <$> ( RsyncOptions
                 <$> parseM (m ^. at "Filters")
+                <*> parseM (m ^. at "ExtraFilters")
                 <*> (fromMaybe False <$> parseM (m ^. at "NoBasicOptions"))
                 <*> (fromMaybe False <$> parseM (m ^. at "NoDelete"))
                 <*> (fromMaybe False <$> parseM (m ^. at "PreserveAttrs"))
@@ -426,7 +427,7 @@ invokeRsync ::
 invokeRsync bnd src roDest host dest = do
   opts <- ask
   withProtected $ \args1 ->
-    withFilters "Filters" (roDest ^. rsyncFilters) $ \args2 ->
+    withFilters "Filters" (combineFilters (roDest ^. rsyncFilters) (roDest ^. rsyncExtraFilters)) $ \args2 ->
       doRsync
         ( fst (bnd ^. bindingTargetHost . hostRefActualHost)
             <> "/"

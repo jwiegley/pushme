@@ -27,6 +27,7 @@ pushmeSummary =
 
 data RsyncOptions = RsyncOptions
   { _rsyncFilters :: Maybe Text,
+    _rsyncExtraFilters :: Maybe Text,
     _rsyncNoBasicOptions :: Bool,
     _rsyncNoDelete :: Bool,
     _rsyncPreserveAttrs :: Bool,
@@ -41,6 +42,7 @@ instance FromJSON RsyncOptions where
   parseJSON (Object v) =
     RsyncOptions
       <$> v .:? "Filters"
+      <*> v .:? "ExtraFilters"
       <*> v .:? "NoBasicOptions" .!= False
       <*> v .:? "NoDelete" .!= False
       <*> v .:? "PreserveAttrs" .!= False
@@ -51,17 +53,24 @@ instance FromJSON RsyncOptions where
   parseJSON _ = errorL "Error parsing Rsync"
 
 instance Semigroup RsyncOptions where
-  RsyncOptions a1 b1 c1 d1 e1 f1 g1 h1
-    <> RsyncOptions a2 b2 c2 d2 e2 f2 g2 h2 =
+  RsyncOptions a1 b1 c1 d1 e1 f1 g1 h1 i1
+    <> RsyncOptions a2 b2 c2 d2 e2 f2 g2 h2 i2 =
       RsyncOptions
         (a2 <|> a1)
-        (b2 || b1)
+        (combineFilters b1 b2)
         (c2 || c1)
         (d2 || d1)
         (e2 || e1)
-        (f2 <|> f1)
+        (f2 || f1)
         (g2 <|> g1)
-        (h2 && h1)
+        (h2 <|> h1)
+        (i2 && i1)
+
+combineFilters :: Maybe Text -> Maybe Text -> Maybe Text
+combineFilters Nothing Nothing = Nothing
+combineFilters (Just a) Nothing = Just a
+combineFilters Nothing (Just b) = Just b
+combineFilters (Just a) (Just b) = Just (a <> "\n" <> b)
 
 makeLenses ''RsyncOptions
 
@@ -219,6 +228,7 @@ pushmeOpts =
                     <> help "rsync filters to pass using --include-from"
                 )
             )
+          <*> pure Nothing
           <*> switch
             ( long "rsync-no-basic-options"
                 <> help "Do not pass -a (and possibly other basic options)"
