@@ -429,7 +429,7 @@ invokeRsync bnd src roDest host dest = do
   withProtected $ \args1 ->
     withFilters "Filters" (combineFilters (roDest ^. rsyncFilters) (roDest ^. rsyncExtraFilters)) $ \args2 ->
       doRsync
-        ( fst (bnd ^. bindingTargetHost . hostRefActualHost)
+        ( bnd ^. bindingTargetHost . hostRefLogicalName
             <> "/"
             <> bnd ^. bindingFileset . filesetName
         )
