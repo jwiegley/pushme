@@ -23,14 +23,18 @@
               src = ./.;
               supportHpack = true;
               compiler-nix-name = "ghc910";
-              shell.tools = {
-                cabal = {};
-                haskell-language-server = {};
-                # hlint = {};
+              shell = {
+                tools = {
+                  cabal = {};
+                  haskell-language-server = {};
+                  hlint = {};
+                };
+                buildInputs = with pkgs; [
+                  pkg-config
+                  haskellPackages.fourmolu
+                  lefthook
+                ];
               };
-              shell.buildInputs = with pkgs; [
-                pkg-config
-              ];
               modules = [{
                 enableLibraryProfiling = true;
                 enableProfiling = true;
@@ -38,18 +42,32 @@
             };
         })
       ];
+
+      src = pkgs.lib.cleanSource ./.;
+
     in flake // {
       packages.default = flake.packages."pushme:exe:pushme";
 
-      devShell = pkgs.haskellPackages.shellFor {
-        packages = p: [
-        ];
+      checks = (flake.checks or {}) // {
+        build = flake.packages."pushme:exe:pushme";
 
-        buildInputs = with pkgs.haskellPackages; [
-          cabal-install
-        ];
+        hlint = pkgs.runCommand "hlint-check" {
+          nativeBuildInputs = [ pkgs.hlint ];
+          inherit src;
+        } ''
+          cd $src
+          hlint Main.hs src/
+          touch $out
+        '';
 
-        withHoogle = true;
+        fourmolu = pkgs.runCommand "fourmolu-check" {
+          nativeBuildInputs = [ pkgs.haskellPackages.fourmolu ];
+          inherit src;
+        } ''
+          cd $src
+          fourmolu --mode check Main.hs src/Pushme/Options.hs
+          touch $out
+        '';
       };
     });
 }
