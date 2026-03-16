@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.38.2.
+-- This file has been generated from package.yaml by hpack version 0.38.3.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 93e1ed3e9d5288526ffc15bb5806db0e70174d9becf706a2a98b2293a510c89a
+-- hash: ec3b8998caf30037041e5c733c94e671e9ae99c03fc0743bf26820aa830b0e42
 
 name:           pushme
 version:        3.0.0
@@ -16,7 +16,7 @@ bug-reports:    https://github.com/jwiegley/pushme/issues
 author:         John Wiegley
 maintainer:     johnw@newartisans.com
 license:        BSD3
-license-file:   LICENSE
+license-file:   LICENSE.md
 build-type:     Simple
 extra-source-files:
     README.md
@@ -25,11 +25,14 @@ source-repository head
   type: git
   location: https://github.com/jwiegley/pushme
 
-executable pushme
-  main-is: Main.hs
-  other-modules:
+library
+  exposed-modules:
       Pushme.Options
-  ghc-options: -Wall -Wno-missing-home-modules -threaded -rtsopts -with-rtsopts=-N
+  other-modules:
+      Paths_pushme
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -Wno-missing-home-modules
   build-depends:
       aeson >=1.0 && <2.3
     , base >=4.7 && <4.21
@@ -49,6 +52,80 @@ executable pushme
     , regex-posix >=0.95 && <0.97
     , system-fileio ==0.3.*
     , system-filepath ==0.4.*
+    , temporary >=1.2 && <1.4
+    , text >=1.2 && <2.2
+    , time >=1.4 && <1.15
+    , transformers >=0.3 && <0.7
+    , unix >=2.6 && <2.9
+    , unordered-containers ==0.2.*
+    , yaml ==0.11.*
+  default-language: Haskell2010
+
+executable pushme
+  main-is: Main.hs
+  other-modules:
+      Paths_pushme
+  ghc-options: -Wall -Wno-missing-home-modules -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson >=1.0 && <2.3
+    , base >=4.7 && <4.21
+    , bytestring >=0.10 && <0.13
+    , containers >=0.6 && <0.8
+    , directory >=1.2 && <1.4
+    , filepath >=1.4 && <1.6
+    , foldl ==1.4.*
+    , lens >=4.9 && <5.4
+    , logging >=3.0.6 && <3.1
+    , monad-logger ==0.3.*
+    , old-locale ==1.0.*
+    , optparse-applicative >=0.10 && <0.19
+    , parallel-io ==0.3.*
+    , pretty-show ==1.10.*
+    , process ==1.6.*
+    , pushme
+    , regex-posix >=0.95 && <0.97
+    , system-fileio ==0.3.*
+    , system-filepath ==0.4.*
+    , temporary >=1.2 && <1.4
+    , text >=1.2 && <2.2
+    , time >=1.4 && <1.15
+    , transformers >=0.3 && <0.7
+    , unix >=2.6 && <2.9
+    , unordered-containers ==0.2.*
+    , yaml ==0.11.*
+  default-language: Haskell2010
+
+test-suite pushme-tests
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Paths_pushme
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -Wno-missing-home-modules -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson >=1.0 && <2.3
+    , base >=4.7 && <4.21
+    , bytestring >=0.10 && <0.13
+    , containers >=0.6 && <0.8
+    , directory >=1.2 && <1.4
+    , filepath >=1.4 && <1.6
+    , foldl ==1.4.*
+    , hedgehog
+    , lens >=4.9 && <5.4
+    , logging >=3.0.6 && <3.1
+    , monad-logger ==0.3.*
+    , old-locale ==1.0.*
+    , optparse-applicative >=0.10 && <0.19
+    , parallel-io ==0.3.*
+    , pretty-show ==1.10.*
+    , process ==1.6.*
+    , pushme
+    , regex-posix >=0.95 && <0.97
+    , system-fileio ==0.3.*
+    , system-filepath ==0.4.*
+    , tasty
+    , tasty-hedgehog
     , temporary >=1.2 && <1.4
     , text >=1.2 && <2.2
     , time >=1.4 && <1.15

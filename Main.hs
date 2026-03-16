@@ -27,38 +27,38 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
 import Data.Aeson hiding (Options)
 import Data.Aeson.Types (Parser)
+import qualified Data.ByteString as BS
 import Data.Function (on)
 import Data.List (isInfixOf, isSuffixOf, sortOn, (\\))
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Maybe
-  ( fromJust,
-    fromMaybe,
-    maybeToList,
-  )
+import Data.Maybe (
+  fromJust,
+  fromMaybe,
+  maybeToList,
+ )
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import qualified Data.Text.Encoding.Error as TEE
 import qualified Data.Text.IO as T
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
 import Data.Traversable (forM)
 import Data.Yaml (decodeFileEither, prettyPrintParseException)
 import Pushme.Options
-import System.Directory
-  ( doesDirectoryExist,
-    getHomeDirectory,
-    listDirectory,
-  )
+import System.Directory (
+  doesDirectoryExist,
+  getHomeDirectory,
+  listDirectory,
+ )
 import System.Exit (ExitCode (..))
-import System.FilePath.Posix
-  ( takeExtension,
-    (</>),
-  )
-import System.IO (hClose, hSetBinaryMode, hPutStr)
+import System.FilePath.Posix (
+  takeExtension,
+  (</>),
+ )
+import System.IO (hClose, hPutStr, hSetBinaryMode)
 import System.IO.Temp (withSystemTempFile)
 import System.Process hiding (env)
-import qualified Data.ByteString as BS
-import qualified Data.Text.Encoding as TE
-import qualified Data.Text.Encoding.Error as TEE
 import Text.Printf (printf)
 import Text.Regex.Posix ((=~))
 import Text.Show.Pretty (ppShow)
@@ -67,11 +67,11 @@ data TransferStatus = TransferSuccess | TransferWarning | TransferError
   deriving (Show, Eq, Ord)
 
 data Fileset = Fileset
-  { _filesetName :: Text,
-    _filesetClasses :: Maybe [Text],
-    _filesetPriority :: Int,
-    _filesetStores :: Map Text (FilePath, RsyncOptions),
-    _filesetCommon :: Maybe RsyncOptions
+  { _filesetName :: Text
+  , _filesetClasses :: Maybe [Text]
+  , _filesetPriority :: Int
+  , _filesetStores :: Map Text (FilePath, RsyncOptions)
+  , _filesetCommon :: Maybe RsyncOptions
   }
   deriving (Show, Eq)
 
@@ -94,10 +94,10 @@ decodeEnrichedOptions m =
                 <*> parseM (m ^. at "ReceiveFrom")
                 <*> (fromMaybe True <$> parseM (m ^. at "Active"))
             )
-  where
-    parseM :: (FromJSON a) => Maybe Value -> Parser (Maybe a)
-    parseM Nothing = pure Nothing
-    parseM (Just v) = parseJSON v
+ where
+  parseM :: (FromJSON a) => Maybe Value -> Parser (Maybe a)
+  parseM Nothing = pure Nothing
+  parseM (Just v) = parseJSON v
 
 instance FromJSON Fileset where
   parseJSON (Object v) =
@@ -110,8 +110,8 @@ instance FromJSON Fileset where
   parseJSON _ = errorL "Error parsing Fileset"
 
 data Host = Host
-  { _hostName :: Text,
-    _hostMaxJobs :: Int
+  { _hostName :: Text
+  , _hostMaxJobs :: Int
   }
   deriving (Show, Eq, Ord)
 
@@ -129,9 +129,10 @@ hostFromRef ref =
   let (name, jobs) = ref ^. hostRefActualHost
    in Host name jobs
 
--- | Parse a host reference from CLI argument, checking aliases first.
--- Supports @N suffix for overriding MaxJobs on both raw hostnames and aliases.
--- Examples: "hera@24", "tank@8" (where tank is an alias)
+{- | Parse a host reference from CLI argument, checking aliases first.
+Supports @N suffix for overriding MaxJobs on both raw hostnames and aliases.
+Examples: "hera@24", "tank@8" (where tank is an alias)
+-}
 parseHostRef :: Options -> Text -> HostRef
 parseHostRef opts name =
   let (baseName, overrideJobs) = case T.split (== '@') name of
@@ -141,68 +142,73 @@ parseHostRef opts name =
    in case opts ^. optsAliases . at baseName of
         Just alias ->
           let (actualName, actualJobs) = case alias ^. aliasHost of
-                h | "@" `T.isInfixOf` h ->
-                  let [n, j] = T.split (== '@') h
-                   in (n, read (unpack j))
+                h
+                  | "@" `T.isInfixOf` h ->
+                      let [n, j] = T.split (== '@') h
+                       in (n, read (unpack j))
                 h -> (h, fromMaybe 1 (alias ^. aliasMaxJobs))
               -- Use override from CLI if provided, otherwise use alias config
               finalJobs = fromMaybe actualJobs overrideJobs
            in HostRef
-                { _hostRefLogicalName = baseName,
-                  _hostRefActualHost = (actualName, finalJobs),
-                  _hostRefVariables = alias ^. aliasVariables
+                { _hostRefLogicalName = baseName
+                , _hostRefActualHost = (actualName, finalJobs)
+                , _hostRefVariables = alias ^. aliasVariables
                 }
         Nothing ->
           let host = parseHost baseName
               finalJobs = fromMaybe (host ^. hostMaxJobs) overrideJobs
            in HostRef
-                { _hostRefLogicalName = baseName,
-                  _hostRefActualHost = (baseName, finalJobs),
-                  _hostRefVariables = M.empty
+                { _hostRefLogicalName = baseName
+                , _hostRefActualHost = (baseName, finalJobs)
+                , _hostRefVariables = M.empty
                 }
 
--- | Interpolate all $variable references in a path using the provided variable map.
--- Variable names must match pattern: $[a-zA-Z_][a-zA-Z0-9_]*
--- Throws error if a variable is referenced but not defined in the map.
+{- | Interpolate all $variable references in a path using the provided variable map.
+Variable names must match pattern: $[a-zA-Z_][a-zA-Z0-9_]*
+Throws error if a variable is referenced but not defined in the map.
+-}
 interpolatePath :: Map Text Text -> FilePath -> FilePath
 interpolatePath variables path
   | "$" `isInfixOf` path = interpolateText variables path
   | otherwise = path
-  where
-    -- Regex pattern for variable names: $[a-zA-Z_][a-zA-Z0-9_]*
-    varPattern :: String
-    varPattern = "\\$[a-zA-Z_][a-zA-Z0-9_]*"
+ where
+  -- Regex pattern for variable names: $[a-zA-Z_][a-zA-Z0-9_]*
+  varPattern :: String
+  varPattern = "\\$[a-zA-Z_][a-zA-Z0-9_]*"
 
-    -- Find all variable references and replace them
-    interpolateText :: Map Text Text -> String -> String
-    interpolateText vars txt =
-      let matches = txt =~ varPattern :: [[String]]
-          varRefs = [m | (m:_) <- matches]  -- Safe head extraction with pattern match
-       in if null varRefs
-            then txt
-            else foldl (replaceVar vars) txt varRefs
+  -- Find all variable references and replace them
+  interpolateText :: Map Text Text -> String -> String
+  interpolateText vars txt =
+    let matches = txt =~ varPattern :: [[String]]
+        varRefs = [m | (m : _) <- matches] -- Safe head extraction with pattern match
+     in if null varRefs
+          then txt
+          else foldl (replaceVar vars) txt varRefs
 
-    -- Replace a single variable reference with its value
-    replaceVar :: Map Text Text -> String -> String -> String
-    replaceVar vars txt varRef =
-      let varName = pack $ drop 1 varRef  -- Remove leading $ and convert to Text
-       in case M.lookup varName vars of
-            Nothing ->
-              error $
-                "Path contains undefined variable " <> varRef
-                  <> " in path: " <> path
-                  <> "\nAvailable variables: " <> show (M.keys vars)
-            Just value ->
-              let result = T.replace (pack varRef) value (pack txt)
-               in unpack result
+  -- Replace a single variable reference with its value
+  replaceVar :: Map Text Text -> String -> String -> String
+  replaceVar vars txt varRef =
+    let varName = pack $ drop 1 varRef -- Remove leading $ and convert to Text
+     in case M.lookup varName vars of
+          Nothing ->
+            error $
+              "Path contains undefined variable "
+                <> varRef
+                <> " in path: "
+                <> path
+                <> "\nAvailable variables: "
+                <> show (M.keys vars)
+          Just value ->
+            let result = T.replace (pack varRef) value (pack txt)
+             in unpack result
 
 data Binding = Binding
-  { _bindingFileset :: Fileset,
-    _bindingSourceHost :: HostRef,
-    _bindingSourcePath :: FilePath,
-    _bindingTargetHost :: HostRef,
-    _bindingTargetPath :: FilePath,
-    _bindingRsyncOpts :: RsyncOptions
+  { _bindingFileset :: Fileset
+  , _bindingSourceHost :: HostRef
+  , _bindingSourcePath :: FilePath
+  , _bindingTargetHost :: HostRef
+  , _bindingTargetPath :: FilePath
+  , _bindingRsyncOpts :: RsyncOptions
   }
   deriving (Show, Eq)
 
@@ -272,116 +278,116 @@ processBindings = do
         (bnds, thereSlots) <- zip (M.toList bindings) thereSlotsAll
         pure (goHost opts hereSlots thereSlots bnds)
     _ -> log' "Usage: pushme FROM TO..."
-  where
-    -- Process all bindings for a single destination host
-    goHost opts p q (there, bnds) = do
-      -- Process all bindings for this host in parallel and collect statuses
-      statuses <- parallel (map (go opts p q) bnds)
-      -- After all bindings for this host are done, print completion message
-      when (not (null bnds)) $ do
-        let overallStatus = maximum statuses  -- TransferError > TransferWarning > TransferSuccess
-            suffix = case overallStatus of
-              TransferSuccess -> ""
-              TransferWarning -> " (with warnings)"
-              TransferError -> " (with errors)"
-            msg = (there ^. hostRefLogicalName) <> " done" <> suffix
-            coloredMsg = if opts ^. optsNoColor
-                         then msg
-                         else case overallStatus of
-                           TransferSuccess -> "\ESC[32m" <> msg <> "\ESC[0m"
-                           TransferWarning -> "\ESC[33m" <> msg <> "\ESC[0m"
-                           TransferError -> "\ESC[31m" <> msg <> "\ESC[0m"
-        -- Use log' for completion messages since they're informational
-        -- (all transfers done), with color/suffix indicating status
-        log' coloredMsg
+ where
+  -- Process all bindings for a single destination host
+  goHost opts p q (there, bnds) = do
+    -- Process all bindings for this host in parallel and collect statuses
+    statuses <- parallel (map (go opts p q) bnds)
+    -- After all bindings for this host are done, print completion message
+    unless (null bnds) $ do
+      let overallStatus = maximum statuses -- TransferError > TransferWarning > TransferSuccess
+          suffix = case overallStatus of
+            TransferSuccess -> ""
+            TransferWarning -> " (with warnings)"
+            TransferError -> " (with errors)"
+          msg = (there ^. hostRefLogicalName) <> " done" <> suffix
+          coloredMsg =
+            if opts ^. optsNoColor
+              then msg
+              else case overallStatus of
+                TransferSuccess -> "\ESC[32m" <> msg <> "\ESC[0m"
+                TransferWarning -> "\ESC[33m" <> msg <> "\ESC[0m"
+                TransferError -> "\ESC[31m" <> msg <> "\ESC[0m"
+      -- Use log' for completion messages since they're informational
+      -- (all transfers done), with color/suffix indicating status
+      log' coloredMsg
 
-    go :: Options -> QSem -> QSem -> Binding -> IO TransferStatus
-    go opts p q bnd = do
-      waitQSem p
-      result <- (waitQSem q >> runReaderT (applyBinding bnd) opts)
-        `finally` (signalQSem q >> signalQSem p)
-      pure result
+  go :: Options -> QSem -> QSem -> Binding -> IO TransferStatus
+  go opts p q bnd = do
+    waitQSem p
+    (waitQSem q >> runReaderT (applyBinding bnd) opts)
+      `finally` (signalQSem q >> signalQSem p)
 
-    applyBinding :: Binding -> App TransferStatus
-    applyBinding bnd = do
-      log' $
-        "Sending "
-          <> (bnd ^. bindingFileset . filesetName)
-          <> " → "
-          <> (bnd ^. bindingTargetHost . hostRefLogicalName)
-      debug' $ pack (ppShow bnd)
-      syncStores
-        bnd
-        (bnd ^. bindingSourcePath)
-        (bnd ^. bindingTargetPath)
-        (bnd ^. bindingRsyncOpts)
+  applyBinding :: Binding -> App TransferStatus
+  applyBinding bnd = do
+    log' $
+      "Sending "
+        <> (bnd ^. bindingFileset . filesetName)
+        <> " → "
+        <> (bnd ^. bindingTargetHost . hostRefLogicalName)
+    debug' $ pack (ppShow bnd)
+    syncStores
+      bnd
+      (bnd ^. bindingSourcePath)
+      (bnd ^. bindingTargetPath)
+      (bnd ^. bindingRsyncOpts)
 
-    relevantBindings ::
-      Options ->
-      HostRef ->
-      Map Text Fileset ->
-      [HostRef] ->
-      Map HostRef [Binding]
-    relevantBindings opts here fsets hosts =
-      M.map
-        (sortOn (^. bindingFileset . filesetPriority))
-        (collect (^. bindingTargetHost) bindings)
-      where
-        bindings :: [Binding]
-        bindings = do
-          fset <- M.elems fsets
-          there <- hosts
-          maybeToList do
-            (src, _) <- fset ^. filesetStores . at (here ^. hostRefLogicalName)
-            (dest, destOpts) <- fset ^. filesetStores . at (there ^. hostRefLogicalName)
-            guard $
-              not
-                ( maybe
-                    False
-                    (not . (here ^. hostRefLogicalName `elem`))
-                    (destOpts ^. rsyncReceiveFrom)
-                )
-            let !srcPath = interpolatePath (here ^. hostRefVariables) src
-                !destPath = interpolatePath (there ^. hostRefVariables) dest
-                binding =
-                  Binding
-                    { _bindingFileset = fset,
-                      _bindingSourceHost = here,
-                      _bindingSourcePath = srcPath,
-                      _bindingTargetHost = there,
-                      _bindingTargetPath = destPath,
-                      _bindingRsyncOpts =
-                        case opts ^. optsRsyncOpts <> fset ^. filesetCommon of
-                          Nothing -> destOpts
-                          Just common -> common <> destOpts
-                    }
-            guard $ isMatching binding
-            guard $ destOpts ^. rsyncActive
-            pure binding
+  relevantBindings ::
+    Options ->
+    HostRef ->
+    Map Text Fileset ->
+    [HostRef] ->
+    Map HostRef [Binding]
+  relevantBindings opts here fsets hosts =
+    M.map
+      (sortOn (^. bindingFileset . filesetPriority))
+      (collect (^. bindingTargetHost) bindings)
+   where
+    bindings :: [Binding]
+    bindings = do
+      fset <- M.elems fsets
+      there <- hosts
+      maybeToList do
+        (src, _) <- fset ^. filesetStores . at (here ^. hostRefLogicalName)
+        (dest, destOpts) <- fset ^. filesetStores . at (there ^. hostRefLogicalName)
+        guard $
+          not
+            ( maybe
+                False
+                (not . (here ^. hostRefLogicalName `elem`))
+                (destOpts ^. rsyncReceiveFrom)
+            )
+        let !srcPath = interpolatePath (here ^. hostRefVariables) src
+            !destPath = interpolatePath (there ^. hostRefVariables) dest
+            binding =
+              Binding
+                { _bindingFileset = fset
+                , _bindingSourceHost = here
+                , _bindingSourcePath = srcPath
+                , _bindingTargetHost = there
+                , _bindingTargetPath = destPath
+                , _bindingRsyncOpts =
+                    case opts ^. optsRsyncOpts <> fset ^. filesetCommon of
+                      Nothing -> destOpts
+                      Just common -> common <> destOpts
+                }
+        guard $ isMatching binding
+        guard $ destOpts ^. rsyncActive
+        pure binding
 
-        isMatching :: Binding -> Bool
-        isMatching bnd =
-          (null fss || any id (matchText (fs ^. filesetName) <$> fss))
-            && (null cls || any id (matchText <$> cs <*> cls))
-          where
-            fs = bnd ^. bindingFileset
-            cs = fromMaybe [] (fs ^. filesetClasses)
-            fss = fromMaybe [] (opts ^. optsFilesets)
-            cls = fromMaybe [] (opts ^. optsClasses)
+    isMatching :: Binding -> Bool
+    isMatching bnd =
+      (null fss || any (matchText (fs ^. filesetName)) fss)
+        && (null cls || or (matchText <$> cs <*> cls))
+     where
+      fs = bnd ^. bindingFileset
+      cs = fromMaybe [] (fs ^. filesetClasses)
+      fss = fromMaybe [] (opts ^. optsFilesets)
+      cls = fromMaybe [] (opts ^. optsClasses)
 
-    readFilesets :: Options -> IO (Map Text Fileset)
-    readFilesets opts = do
-      confD <- expandPath (opts ^. optsConfigDir </> "filesets")
-      exists <- doesDirectoryExist confD
-      unless exists $
-        errorL $
-          "Please define filesets, "
-            <> "using files named "
-            <> pack (opts ^. optsConfigDir)
-            <> "filesets/<name>.yaml"
-      directoryContents confD
-        >>= mapM readYaml . filter (\n -> takeExtension n == ".yaml")
-        <&> M.fromList . map ((^. filesetName) &&& id)
+  readFilesets :: Options -> IO (Map Text Fileset)
+  readFilesets opts = do
+    confD <- expandPath (opts ^. optsConfigDir </> "filesets")
+    exists <- doesDirectoryExist confD
+    unless exists $
+      errorL $
+        "Please define filesets, "
+          <> "using files named "
+          <> pack (opts ^. optsConfigDir)
+          <> "filesets/<name>.yaml"
+    directoryContents confD
+      >>= mapM readYaml . filter (\n -> takeExtension n == ".yaml")
+      <&> M.fromList . map ((^. filesetName) &&& id)
 
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
 checkDirectory _ path False =
@@ -394,12 +400,12 @@ checkDirectory bnd path True =
       (remoteHost bnd)
       "test"
       ["-d", unpack (escape (pack path))]
-  where
-    escape :: Text -> Text
-    escape x
-      | "\"" `T.isInfixOf` x || " " `T.isInfixOf` x =
-          "'" <> T.replace "\"" "\\\"" x <> "'"
-      | otherwise = x
+ where
+  escape :: Text -> Text
+  escape x
+    | "\"" `T.isInfixOf` x || " " `T.isInfixOf` x =
+        "'" <> T.replace "\"" "\\\"" x <> "'"
+    | otherwise = x
 
 syncStores :: Binding -> FilePath -> FilePath -> RsyncOptions -> App TransferStatus
 syncStores bnd src dest roDest = do
@@ -413,9 +419,9 @@ syncStores bnd src dest roDest = do
       warn $ "Either local directory missing: " <> pack l
       warn $ "OR remote directory missing: " <> pack r
       pure TransferError
-  where
-    (asDirectory -> l) = src
-    (asDirectory -> r) = dest
+ where
+  (asDirectory -> l) = src
+  (asDirectory -> r) = dest
 
 invokeRsync ::
   Binding ->
@@ -434,38 +440,38 @@ invokeRsync bnd src roDest host dest = do
             <> bnd ^. bindingFileset . filesetName
         )
         (rsyncArguments opts (args1 ++ args2))
-  where
-    withProtected k
-      | roDest ^. rsyncProtectTopLevel =
-          k ["--filter", "P /*"]
-      | otherwise = k []
+ where
+  withProtected k
+    | roDest ^. rsyncProtectTopLevel =
+        k ["--filter", "P /*"]
+    | otherwise = k []
 
-    withFilters label fs k = case fs of
-      Nothing -> k []
-      Just filters -> withSystemTempFile "filters" $ \fpath h -> do
-        liftIO do
-          T.hPutStr h filters
-          hClose h
-        debug' $ label <> ":\n" <> filters
-        k ["--include-from", pack fpath]
+  withFilters label fs k = case fs of
+    Nothing -> k []
+    Just filters -> withSystemTempFile "filters" $ \fpath h -> do
+      liftIO do
+        T.hPutStr h filters
+        hClose h
+      debug' $ label <> ":\n" <> filters
+      k ["--include-from", pack fpath]
 
-    rsyncArguments :: Options -> [Text] -> [Text]
-    rsyncArguments opts args =
-      ["-a" | not (roDest ^. rsyncNoBasicOptions)]
-        <> ["--delete" | not (roDest ^. rsyncNoDelete)]
-        <> ["-AXUNHE" | roDest ^. rsyncPreserveAttrs]
-        <> ["-n" | opts ^. optsDryRun]
-        <> ( if opts ^. optsVerbose
-               then ["-v"]
-               else ["--stats"]
-           )
-        <> args
-        <> fromMaybe [] (roDest ^. rsyncOptions)
-        <> [ pack src,
-             case host ^? _Just . hostName of
-               Nothing -> pack dest
-               Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack dest))
-           ]
+  rsyncArguments :: Options -> [Text] -> [Text]
+  rsyncArguments opts args =
+    ["-a" | not (roDest ^. rsyncNoBasicOptions)]
+      <> ["--delete" | not (roDest ^. rsyncNoDelete)]
+      <> ["-AXUNHE" | roDest ^. rsyncPreserveAttrs]
+      <> ["-n" | opts ^. optsDryRun]
+      <> ( if opts ^. optsVerbose
+             then ["-v"]
+             else ["--stats"]
+         )
+      <> args
+      <> fromMaybe [] (roDest ^. rsyncOptions)
+      <> [ pack src
+         , case host ^? _Just . hostName of
+             Nothing -> pack dest
+             Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack dest))
+         ]
 
 doRsync :: Text -> [Text] -> App TransferStatus
 doRsync label args = do
@@ -473,8 +479,8 @@ doRsync label args = do
   (ec, diff, output) <- execute Nothing "rsync" (map unpack args)
   let status = case ec of
         ExitSuccess -> TransferSuccess
-        ExitFailure 23 -> TransferWarning  -- Partial transfer
-        ExitFailure 24 -> TransferWarning  -- Vanished source files
+        ExitFailure 23 -> TransferWarning -- Partial transfer
+        ExitFailure 24 -> TransferWarning -- Vanished source files
         _ -> TransferError
   when (ec == ExitSuccess && not (opts ^. optsDryRun)) $
     if opts ^. optsVerbose
@@ -514,52 +520,52 @@ doRsync label args = do
               (opts ^. optsNoColor)
               ("[" <> tshow (round diff :: Int) <> "s]")
   pure status
-  where
-    field :: Text -> M.Map Text Text -> Maybe Integer
-    field x = fmap (read . unpack) . M.lookup x
+ where
+  field :: Text -> M.Map Text Text -> Maybe Integer
+  field x = fmap (read . unpack) . M.lookup x
 
-    colored True _ s = s
-    colored False n s = "\ESC[" <> tshow (n :: Int) <> "m" <> s <> "\ESC[0m"
-    purple b = colored b 35
-    cyan b = colored b 36
-    green b = colored b 32
+  colored True _ s = s
+  colored False n s = "\ESC[" <> tshow (n :: Int) <> "m" <> s <> "\ESC[0m"
+  purple b = colored b 35
+  cyan b = colored b 36
+  green b = colored b 32
 
-    commaSep :: Int -> Text
-    commaSep =
-      fst
-        . T.foldr
-          ( \x (xs, num :: Int) ->
-              if num /= 0 && num `mod` 3 == 0
-                then (x `T.cons` ',' `T.cons` xs, num + 1)
-                else (x `T.cons` xs, num + 1)
-          )
-          ("", 0)
-        . tshow
+  commaSep :: Int -> Text
+  commaSep =
+    fst
+      . T.foldr
+        ( \x (xs, num :: Int) ->
+            if num /= 0 && num `mod` 3 == 0
+              then (x `T.cons` ',' `T.cons` xs, num + 1)
+              else (x `T.cons` xs, num + 1)
+        )
+        ("", 0)
+      . tshow
 
-    humanReadable :: Integer -> Integer -> Text
-    humanReadable den x =
-      pack $
-        fromJust $
-          f 0 "b"
-            <|> f 1 "K"
-            <|> f 2 "M"
-            <|> f 3 "G"
-            <|> f 4 "T"
-            <|> f 5 "P"
-            <|> f 6 "X"
-            <|> Just (printf "%db" x)
-      where
-        f :: Integer -> String -> Maybe String
-        f n s
-          | x < (den ^ succ n) =
-              Just $
-                if n == 0
-                  then printf ("%d" ++ s) x
-                  else
-                    printf
-                      ("%." ++ show (min 3 (pred n)) ++ "f" ++ s)
-                      (fromIntegral x / (fromIntegral den ^ n :: Double))
-        f _ _ = Nothing
+  humanReadable :: Integer -> Integer -> Text
+  humanReadable den x =
+    pack $
+      fromJust $
+        f 0 "b"
+          <|> f 1 "K"
+          <|> f 2 "M"
+          <|> f 3 "G"
+          <|> f 4 "T"
+          <|> f 5 "P"
+          <|> f 6 "X"
+          <|> Just (printf "%db" x)
+   where
+    f :: Integer -> String -> Maybe String
+    f n s
+      | x < (den ^ succ n) =
+          Just $
+            if n == 0
+              then printf ("%d" ++ s) x
+              else
+                printf
+                  ("%." ++ show (min 3 (pred n)) ++ "f" ++ s)
+                  (fromIntegral x / (fromIntegral den ^ n :: Double))
+    f _ _ = Nothing
 
 execute ::
   Maybe Host ->
@@ -582,11 +588,15 @@ execute mhost cmdName args = do
   when (ec /= ExitSuccess) $ do
     let errLines = lines err
         numLines = length errLines
-        truncatedErr = if numLines > 10
-          then unlines (take 5 errLines)
-               <> "... (" <> show (numLines - 10) <> " more lines) ...\n"
-               <> unlines (drop (numLines - 5) errLines)
-          else err
+        truncatedErr =
+          if numLines > 10
+            then
+              unlines (take 5 errLines)
+                <> "... ("
+                <> show (numLines - 10)
+                <> " more lines) ...\n"
+                <> unlines (drop (numLines - 5) errLines)
+            else err
     -- Note: Using warn' instead of errorL' because we want to log the error
     -- but not throw an exception - the transfer status is tracked separately
     warn' $
@@ -597,61 +607,62 @@ execute mhost cmdName args = do
         <> ": "
         <> pack truncatedErr
   pure (ec, diff, out)
-  where
-    -- Use binary I/O and lenient UTF-8 decoding to handle arbitrary byte sequences
-    -- from rsync (e.g., filenames with non-UTF-8 characters)
-    readProcessWithExitCodeLenient ::
-      FilePath -> [String] -> String -> IO (ExitCode, String, String)
-    readProcessWithExitCodeLenient cmd cmdArgs stdin = do
-      let cp = (proc cmd cmdArgs)
+ where
+  -- Use binary I/O and lenient UTF-8 decoding to handle arbitrary byte sequences
+  -- from rsync (e.g., filenames with non-UTF-8 characters)
+  readProcessWithExitCodeLenient ::
+    FilePath -> [String] -> String -> IO (ExitCode, String, String)
+  readProcessWithExitCodeLenient cmd cmdArgs stdin = do
+    let cp =
+          (proc cmd cmdArgs)
             { std_in = CreatePipe
             , std_out = CreatePipe
             , std_err = CreatePipe
             }
-      (Just hIn, Just hOut, Just hErr, ph) <- createProcess cp
+    (Just hIn, Just hOut, Just hErr, ph) <- createProcess cp
 
-      -- Set binary mode to avoid encoding issues
-      hSetBinaryMode hOut True
-      hSetBinaryMode hErr True
-      hSetBinaryMode hIn True
+    -- Set binary mode to avoid encoding issues
+    hSetBinaryMode hOut True
+    hSetBinaryMode hErr True
+    hSetBinaryMode hIn True
 
-      -- Write stdin and close
-      hPutStr hIn stdin
-      hClose hIn
+    -- Write stdin and close
+    hPutStr hIn stdin
+    hClose hIn
 
-      -- Read stdout and stderr concurrently to avoid deadlock
-      outMVar <- newEmptyMVar
-      errMVar <- newEmptyMVar
+    -- Read stdout and stderr concurrently to avoid deadlock
+    outMVar <- newEmptyMVar
+    errMVar <- newEmptyMVar
 
-      _ <- forkIO $ do
-        outBytes <- BS.hGetContents hOut
-        let outStr = unpack $ TE.decodeUtf8With TEE.lenientDecode outBytes
-        putMVar outMVar outStr
+    _ <- forkIO $ do
+      outBytes <- BS.hGetContents hOut
+      let outStr = unpack $ TE.decodeUtf8With TEE.lenientDecode outBytes
+      putMVar outMVar outStr
 
-      _ <- forkIO $ do
-        errBytes <- BS.hGetContents hErr
-        let errStr = unpack $ TE.decodeUtf8With TEE.lenientDecode errBytes
-        putMVar errMVar errStr
+    _ <- forkIO $ do
+      errBytes <- BS.hGetContents hErr
+      let errStr = unpack $ TE.decodeUtf8With TEE.lenientDecode errBytes
+      putMVar errMVar errStr
 
-      -- Wait for both threads to finish
-      outStr <- takeMVar outMVar
-      errStr <- takeMVar errMVar
+    -- Wait for both threads to finish
+    outStr <- takeMVar outMVar
+    errStr <- takeMVar errMVar
 
-      exitCode <- waitForProcess ph
-      pure (exitCode, outStr, errStr)
+    exitCode <- waitForProcess ph
+    pure (exitCode, outStr, errStr)
 
-    timeFunction :: IO a -> IO (NominalDiffTime, a)
-    timeFunction function = do
-      startTime <- getCurrentTime
-      a <- function
-      endTime <- getCurrentTime
-      pure (diffUTCTime endTime startTime, a)
+  timeFunction :: IO a -> IO (NominalDiffTime, a)
+  timeFunction function = do
+    startTime <- getCurrentTime
+    a <- function
+    endTime <- getCurrentTime
+    pure (diffUTCTime endTime startTime, a)
 
-    remote :: Host -> (FilePath, [String]) -> (FilePath, [String])
-    remote host (p, xs) =
-      ( "ssh",
-        unpack (host ^. hostName) : p : xs
-      )
+  remote :: Host -> (FilePath, [String]) -> (FilePath, [String])
+  remote host (p, xs) =
+    ( "ssh"
+    , unpack (host ^. hostName) : p : xs
+    )
 
 -- Utility functions
 

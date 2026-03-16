@@ -19,22 +19,22 @@ version :: String
 version = "3.0.0"
 
 copyright :: String
-copyright = "2013-2025"
+copyright = "2012-2026"
 
 pushmeSummary :: String
 pushmeSummary =
   "pushme " ++ version ++ ", (C) " ++ copyright ++ " John Wiegley"
 
 data RsyncOptions = RsyncOptions
-  { _rsyncFilters :: Maybe Text,
-    _rsyncExtraFilters :: Maybe Text,
-    _rsyncNoBasicOptions :: Bool,
-    _rsyncNoDelete :: Bool,
-    _rsyncPreserveAttrs :: Bool,
-    _rsyncProtectTopLevel :: Bool,
-    _rsyncOptions :: Maybe [Text],
-    _rsyncReceiveFrom :: Maybe [Text],
-    _rsyncActive :: Bool
+  { _rsyncFilters :: Maybe Text
+  , _rsyncExtraFilters :: Maybe Text
+  , _rsyncNoBasicOptions :: Bool
+  , _rsyncNoDelete :: Bool
+  , _rsyncPreserveAttrs :: Bool
+  , _rsyncProtectTopLevel :: Bool
+  , _rsyncOptions :: Maybe [Text]
+  , _rsyncReceiveFrom :: Maybe [Text]
+  , _rsyncActive :: Bool
   }
   deriving (Show, Eq)
 
@@ -76,10 +76,10 @@ makeLenses ''RsyncOptions
 
 -- | Alias definition for host names with optional configuration overrides
 data Alias = Alias
-  { _aliasName :: Text,
-    _aliasHost :: Text,
-    _aliasMaxJobs :: Maybe Int,
-    _aliasVariables :: Map Text Text
+  { _aliasName :: Text
+  , _aliasHost :: Text
+  , _aliasMaxJobs :: Maybe Int
+  , _aliasVariables :: Map Text Text
   }
   deriving (Show, Eq)
 
@@ -97,13 +97,11 @@ instance FromJSON Alias where
     host <- case mHost of
       Nothing -> fail "Missing required field 'Host' in alias definition"
       Just h -> pure h
-    Alias
-      <$> pure ""  -- Will be filled in from the Map key
-      <*> pure host
-      <*> v .:? "MaxJobs"
+    Alias "" host -- Name will be filled in from the Map key
+      <$> v .:? "MaxJobs"
       <*> pure finalVariables
-    where
-      addContext msg = "Error parsing Alias: " ++ msg
+   where
+    addContext msg = "Error parsing Alias: " ++ msg
   parseJSON _ = errorL "Error parsing Alias"
 
 makeLenses ''Alias
@@ -113,25 +111,25 @@ makeLenses ''Alias
 
 -- | Host reference combining logical name (for fileset matching) with actual host details
 data HostRef = HostRef
-  { _hostRefLogicalName :: Text,
-    _hostRefActualHost :: (Text, Int),  -- (hostName, maxJobs) - avoiding circular dependency
-    _hostRefVariables :: Map Text Text
+  { _hostRefLogicalName :: Text
+  , _hostRefActualHost :: (Text, Int) -- (hostName, maxJobs) - avoiding circular dependency
+  , _hostRefVariables :: Map Text Text
   }
   deriving (Show, Eq, Ord)
 
 makeLenses ''HostRef
 
 data Options = Options
-  { _optsConfigDir :: FilePath,
-    _optsDryRun :: Bool,
-    _optsFilesets :: Maybe [Text],
-    _optsClasses :: Maybe [Text],
-    _optsSiUnits :: Bool,
-    _optsVerbose :: Bool,
-    _optsNoColor :: Bool,
-    _optsRsyncOpts :: Maybe RsyncOptions,
-    _optsAliases :: Map Text Alias,
-    _optsCliArgs :: [String]
+  { _optsConfigDir :: FilePath
+  , _optsDryRun :: Bool
+  , _optsFilesets :: Maybe [Text]
+  , _optsClasses :: Maybe [Text]
+  , _optsSiUnits :: Bool
+  , _optsVerbose :: Bool
+  , _optsNoColor :: Bool
+  , _optsRsyncOpts :: Maybe RsyncOptions
+  , _optsAliases :: Map Text Alias
+  , _optsCliArgs :: [String]
   }
   deriving (Show, Eq)
 
@@ -139,11 +137,12 @@ instance FromJSON Options where
   parseJSON (Object v) = do
     aliasMap <- v .:? "Aliases" .!= M.empty
     -- Fill in the _aliasName field from the Map keys
-    let aliasMapWithNames = M.mapWithKey (\k a -> a {_aliasName = k}) aliasMap
+    let aliasMapWithNames = M.mapWithKey (\k a -> a{_aliasName = k}) aliasMap
     -- Validate that all aliases have a non-empty Host field
     forM_ (M.toList aliasMapWithNames) $ \(name, alias) ->
       when (T.null (alias ^. aliasHost)) $
-        fail $ "Alias '" ++ unpack name ++ "' is missing required field 'Host'"
+        fail $
+          "Alias '" ++ unpack name ++ "' is missing required field 'Host'"
     Options
       <$> v .:? "Config" .!= "~/.config/pushme"
       <*> v .:? "DryRun" .!= False
@@ -169,7 +168,7 @@ instance Semigroup Options where
         (f2 || f1)
         (g2 || g1)
         (h2 <> h1)
-        (i2 <> i1)  -- Right-biased merge: right Map wins on key conflicts
+        (i2 <> i1) -- Right-biased merge: right Map wins on key conflicts
         (j2 <|> j1)
 
 makeLenses ''Options
@@ -255,7 +254,7 @@ pushmeOpts =
           <*> pure Nothing
           <*> pure True
       )
-    <*> pure M.empty  -- Aliases come from config file, not CLI
+    <*> pure M.empty -- Aliases come from config file, not CLI
     <*> many (argument (eitherReader Right) (metavar "ARGS"))
 
 optionsDefinition :: ParserInfo Options

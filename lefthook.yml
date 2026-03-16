@@ -1,0 +1,12 @@
+pre-commit:
+  parallel: true
+  commands:
+    build-and-test:
+      glob: "*.{hs,yaml}"
+      run: cabal build --ghc-options=-Werror 2>&1 && cabal test all 2>&1
+    hlint:
+      glob: "*.hs"
+      run: nix shell nixpkgs#hlint --command hlint Main.hs src/ test/
+    fourmolu:
+      glob: "*.hs"
+      run: nix shell nixpkgs#haskellPackages.fourmolu --command fourmolu --mode check Main.hs src/Pushme/Options.hs test/Main.hs

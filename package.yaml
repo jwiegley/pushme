@@ -6,6 +6,7 @@ author:     John Wiegley
 maintainer: johnw@newartisans.com
 category:   System
 license:    BSD3
+license-file: LICENSE.md
 
 description:
   pushme is a wrapper around rsync allowing declarative filesets to be
@@ -47,9 +48,25 @@ dependencies:
 extra-source-files:
   - README.md
 
+library:
+  source-dirs: src
+  exposed-modules:
+    - Pushme.Options
+
 executables:
   pushme:
     main: Main.hs
     ghc-options: -threaded -rtsopts -with-rtsopts=-N
-    other-modules:
-      - Pushme.Options
+    dependencies:
+      - pushme
+
+tests:
+  pushme-tests:
+    main: Main.hs
+    source-dirs: test
+    ghc-options: -threaded -rtsopts -with-rtsopts=-N
+    dependencies:
+      - pushme
+      - hedgehog
+      - tasty
+      - tasty-hedgehog
