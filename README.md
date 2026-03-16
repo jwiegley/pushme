@@ -333,5 +333,5 @@ cabal run pushme -- hera athena
 
 ## License
 
-Copyright (C) 2025 John Wiegley
-BSD3 License - see LICENSE file for details
+Copyright (C) 2012-2026 John Wiegley
+BSD3 License - see LICENSE.md for details
