@@ -275,16 +275,20 @@ processBindings = do
       localHostname <-
         T.toLower . T.takeWhile (/= '.') . T.strip . pack
           <$> readProcess "hostname" ["-s"] ""
+      debug' $ "Local hostname: " <> localHostname
       let hereRef = parseHostRef opts (pack host)
           allHostRefs = map (parseHostRef opts . pack) hosts
           resolvedName ref =
             T.toLower $ T.takeWhile (/= '.') $ fst (ref ^. hostRefActualHost)
+          matchesLocal ref =
+            resolvedName ref == localHostname
+              || T.toLower (ref ^. hostRefLogicalName) == localHostname
           -- Auto-detect: if first arg is not local, find the local host
           -- among the remaining args and treat as reverse (pull) mode
           (here, remoteRefs, pullMode)
             | opts ^. optsReverse = (hereRef, allHostRefs, True)
-            | resolvedName hereRef /= localHostname =
-                case filter (\r -> resolvedName r == localHostname) allHostRefs of
+            | not (matchesLocal hereRef) =
+                case filter matchesLocal allHostRefs of
                   (localRef : _) ->
                     (localRef, hereRef : filter (/= localRef) allHostRefs, True)
                   [] -> (hereRef, allHostRefs, False)
