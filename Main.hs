@@ -66,6 +66,9 @@ import Text.Show.Pretty (ppShow)
 data TransferStatus = TransferSuccess | TransferWarning | TransferError
   deriving (Show, Eq, Ord)
 
+data SyncDirection = Push | Pull
+  deriving (Show, Eq, Ord)
+
 data Fileset = Fileset
   { _filesetName :: Text
   , _filesetClasses :: Maybe [Text]
@@ -215,10 +218,16 @@ data Binding = Binding
   , _bindingTargetHost :: HostRef
   , _bindingTargetPath :: FilePath
   , _bindingRsyncOpts :: RsyncOptions
+  , _bindingDirection :: SyncDirection
   }
   deriving (Show, Eq)
 
 makeLenses ''Binding
+
+bindingRemoteHost :: Binding -> HostRef
+bindingRemoteHost bnd = case bnd ^. bindingDirection of
+  Push -> bnd ^. bindingTargetHost
+  Pull -> bnd ^. bindingSourceHost
 
 isLocal :: Binding -> Bool
 isLocal bnd =
@@ -228,7 +237,9 @@ isLocal bnd =
 remoteHost :: Binding -> Maybe Host
 remoteHost bnd
   | isLocal bnd = Nothing
-  | otherwise = Just (hostFromRef (bnd ^. bindingTargetHost))
+  | otherwise = case bnd ^. bindingDirection of
+      Push -> Just (hostFromRef (bnd ^. bindingTargetHost))
+      Pull -> Just (hostFromRef (bnd ^. bindingSourceHost))
 
 type App a = ReaderT Options IO a
 
@@ -258,19 +269,35 @@ processBindings = do
   case opts ^. optsCliArgs of
     host : hosts@(_ : _) -> liftIO do
       fsets <- traverse expandFilesetPaths =<< readFilesets opts
-      let here = parseHostRef opts (pack host)
+      -- Determine direction: --reverse flag or auto-detect from hostname
+      localHostname <-
+        T.toLower . T.takeWhile (/= '.') . T.strip . pack
+          <$> readProcess "hostname" ["-s"] ""
+      let hereRef = parseHostRef opts (pack host)
+          allHostRefs = map (parseHostRef opts . pack) hosts
+          resolvedName ref =
+            T.toLower $ T.takeWhile (/= '.') $ fst (ref ^. hostRefActualHost)
+          -- Auto-detect: if first arg is not local, find the local host
+          -- among the remaining args and treat as reverse (pull) mode
+          (here, remoteRefs, pullMode)
+            | opts ^. optsReverse = (hereRef, allHostRefs, True)
+            | resolvedName hereRef /= localHostname =
+                case filter (\r -> resolvedName r == localHostname) allHostRefs of
+                  (localRef : _) ->
+                    (localRef, hereRef : filter (/= localRef) allHostRefs, True)
+                  [] -> (hereRef, allHostRefs, False)
+            | otherwise = (hereRef, allHostRefs, False)
           bindings =
-            relevantBindings
-              opts
-              here
-              fsets
-              (map (parseHostRef opts . pack) hosts)
+            relevantBindings opts here fsets remoteRefs pullMode
+      when pullMode $
+        debug' "Reverse mode: pulling from remote hosts"
       debug' $
         "Local host "
           <> fst (here ^. hostRefActualHost)
           <> " with "
           <> tshow (snd (here ^. hostRefActualHost))
-          <> " sending jobs"
+          <> (if pullMode then " receiving" else " sending")
+          <> " jobs"
       hereSlots <- newQSem (snd (here ^. hostRefActualHost))
       thereSlotsAll <- forM (M.keys bindings) $ \there -> do
         debug' $
@@ -316,11 +343,17 @@ processBindings = do
 
   applyBinding :: Binding -> App TransferStatus
   applyBinding bnd = do
-    log' $
-      "Sending "
-        <> (bnd ^. bindingFileset . filesetName)
-        <> " → "
-        <> (bnd ^. bindingTargetHost . hostRefLogicalName)
+    log' $ case bnd ^. bindingDirection of
+      Push ->
+        "Sending "
+          <> (bnd ^. bindingFileset . filesetName)
+          <> " → "
+          <> (bnd ^. bindingTargetHost . hostRefLogicalName)
+      Pull ->
+        "Receiving "
+          <> (bnd ^. bindingFileset . filesetName)
+          <> " ← "
+          <> (bnd ^. bindingSourceHost . hostRefLogicalName)
     debug' $ pack (ppShow bnd)
     syncStores
       bnd
@@ -333,43 +366,83 @@ processBindings = do
     HostRef ->
     Map Text Fileset ->
     [HostRef] ->
+    Bool ->
     Map HostRef [Binding]
-  relevantBindings opts here fsets hosts =
+  relevantBindings opts here fsets hosts pullMode =
     M.map
       (sortOn (^. bindingFileset . filesetPriority))
-      (collect (^. bindingTargetHost) bindings)
+      (collect bindingRemoteHost bindings)
    where
     bindings :: [Binding]
     bindings = do
       fset <- M.elems fsets
       there <- hosts
-      maybeToList do
-        (src, _) <- fset ^. filesetStores . at (here ^. hostRefLogicalName)
-        (dest, destOpts) <- fset ^. filesetStores . at (there ^. hostRefLogicalName)
-        guard $
-          not
-            ( maybe
-                False
-                (not . (here ^. hostRefLogicalName `elem`))
-                (destOpts ^. rsyncReceiveFrom)
-            )
-        let !srcPath = interpolatePath (here ^. hostRefVariables) src
-            !destPath = interpolatePath (there ^. hostRefVariables) dest
-            binding =
-              Binding
-                { _bindingFileset = fset
-                , _bindingSourceHost = here
-                , _bindingSourcePath = srcPath
-                , _bindingTargetHost = there
-                , _bindingTargetPath = destPath
-                , _bindingRsyncOpts =
-                    case opts ^. optsRsyncOpts <> fset ^. filesetCommon of
-                      Nothing -> destOpts
-                      Just common -> common <> destOpts
-                }
-        guard $ isMatching binding
-        guard $ destOpts ^. rsyncActive
-        pure binding
+      maybeToList $
+        if pullMode
+          then buildPullBinding fset there
+          else buildPushBinding fset there
+
+    buildPushBinding :: Fileset -> HostRef -> Maybe Binding
+    buildPushBinding fset there = do
+      (src, _) <- fset ^. filesetStores . at (here ^. hostRefLogicalName)
+      (dest, destOpts) <- fset ^. filesetStores . at (there ^. hostRefLogicalName)
+      guard $
+        not
+          ( maybe
+              False
+              (not . (here ^. hostRefLogicalName `elem`))
+              (destOpts ^. rsyncReceiveFrom)
+          )
+      let !srcPath = interpolatePath (here ^. hostRefVariables) src
+          !destPath = interpolatePath (there ^. hostRefVariables) dest
+          binding =
+            Binding
+              { _bindingFileset = fset
+              , _bindingSourceHost = here
+              , _bindingSourcePath = srcPath
+              , _bindingTargetHost = there
+              , _bindingTargetPath = destPath
+              , _bindingRsyncOpts =
+                  case opts ^. optsRsyncOpts <> fset ^. filesetCommon of
+                    Nothing -> destOpts
+                    Just common -> common <> destOpts
+              , _bindingDirection = Push
+              }
+      guard $ isMatching binding
+      guard $ destOpts ^. rsyncActive
+      pure binding
+
+    buildPullBinding :: Fileset -> HostRef -> Maybe Binding
+    buildPullBinding fset there = do
+      (srcPath0, srcOpts) <- fset ^. filesetStores . at (there ^. hostRefLogicalName)
+      (destPath0, destOpts) <- fset ^. filesetStores . at (here ^. hostRefLogicalName)
+      -- ReceiveFrom: does local store allow receiving from remote?
+      guard $
+        not
+          ( maybe
+              False
+              (not . (there ^. hostRefLogicalName `elem`))
+              (destOpts ^. rsyncReceiveFrom)
+          )
+      let !srcPath = interpolatePath (there ^. hostRefVariables) srcPath0
+          !destPath = interpolatePath (here ^. hostRefVariables) destPath0
+          binding =
+            Binding
+              { _bindingFileset = fset
+              , _bindingSourceHost = there
+              , _bindingSourcePath = srcPath
+              , _bindingTargetHost = here
+              , _bindingTargetPath = destPath
+              , _bindingRsyncOpts =
+                  case opts ^. optsRsyncOpts <> fset ^. filesetCommon of
+                    Nothing -> destOpts
+                    Just common -> common <> destOpts
+              , _bindingDirection = Pull
+              }
+      guard $ isMatching binding
+      guard $ srcOpts ^. rsyncActive
+      guard $ destOpts ^. rsyncActive
+      pure binding
 
     isMatching :: Binding -> Bool
     isMatching bnd =
@@ -415,15 +488,23 @@ checkDirectory bnd path True =
 
 syncStores :: Binding -> FilePath -> FilePath -> RsyncOptions -> App TransferStatus
 syncStores bnd src dest roDest = do
-  exists <-
-    (&&)
-      <$> checkDirectory bnd l False
-      <*> checkDirectory bnd r True
+  exists <- case bnd ^. bindingDirection of
+    Push ->
+      (&&)
+        <$> checkDirectory bnd l False
+        <*> checkDirectory bnd r True
+    Pull ->
+      (&&)
+        <$> checkDirectory bnd l True
+        <*> checkDirectory bnd r False
   if exists
     then invokeRsync bnd l roDest (remoteHost bnd) r
     else liftIO do
-      warn $ "Either local directory missing: " <> pack l
-      warn $ "OR remote directory missing: " <> pack r
+      let (localDir, remoteDir) = case bnd ^. bindingDirection of
+            Push -> (l, r)
+            Pull -> (r, l)
+      warn $ "Either local directory missing: " <> pack localDir
+      warn $ "OR remote directory missing: " <> pack remoteDir
       pure TransferError
  where
   (asDirectory -> l) = src
@@ -441,7 +522,7 @@ invokeRsync bnd src roDest host dest = do
   withProtected $ \args1 ->
     withFilters "Filters" (combineFilters (roDest ^. rsyncFilters) (roDest ^. rsyncExtraFilters)) $ \args2 ->
       doRsync
-        ( bnd ^. bindingTargetHost . hostRefLogicalName
+        ( bindingRemoteHost bnd ^. hostRefLogicalName
             <> "/"
             <> bnd ^. bindingFileset . filesetName
         )
@@ -478,11 +559,19 @@ invokeRsync bnd src roDest host dest = do
          )
       <> args
       <> fromMaybe [] (roDest ^. rsyncOptions)
-      <> [ pack src
-         , case host ^? _Just . hostName of
-             Nothing -> pack dest
-             Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack dest))
-         ]
+      <> case bnd ^. bindingDirection of
+           Push ->
+             [ pack src
+             , case host ^? _Just . hostName of
+                 Nothing -> pack dest
+                 Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack dest))
+             ]
+           Pull ->
+             [ case host ^? _Just . hostName of
+                 Nothing -> pack src
+                 Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack src))
+             , pack dest
+             ]
 
 doRsync :: Text -> [Text] -> App TransferStatus
 doRsync label args = do

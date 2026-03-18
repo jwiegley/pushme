@@ -143,6 +143,7 @@ data Options = Options
   , _optsSiUnits :: Bool
   , _optsVerbose :: Bool
   , _optsNoColor :: Bool
+  , _optsReverse :: Bool
   , _optsRsyncOpts :: Maybe RsyncOptions
   , _optsAliases :: Map Text Alias
   , _optsCliArgs :: [String]
@@ -167,14 +168,15 @@ instance FromJSON Options where
       <*> v .:? "SIUnits" .!= False
       <*> v .:? "Verbose" .!= False
       <*> v .:? "NoColor" .!= False
+      <*> v .:? "Reverse" .!= False
       <*> v .:? "GlobalOptions"
       <*> pure aliasMapWithNames
       <*> pure []
   parseJSON _ = errorL "Error parsing Options"
 
 instance Semigroup Options where
-  Options _a1 b1 c1 d1 e1 f1 g1 h1 i1 j1
-    <> Options a2 b2 c2 d2 e2 f2 g2 h2 i2 j2 =
+  Options _a1 b1 c1 d1 e1 f1 g1 g1r h1 i1 j1
+    <> Options a2 b2 c2 d2 e2 f2 g2 g2r h2 i2 j2 =
       Options
         a2
         (b2 || b1)
@@ -183,6 +185,7 @@ instance Semigroup Options where
         (e2 || e1)
         (f2 || f1)
         (g2 || g1)
+        (g2r || g1r)
         (h2 <> h1)
         (i2 <> i1) -- Right-biased merge: right Map wins on key conflicts
         (j2 <|> j1)
@@ -234,6 +237,11 @@ pushmeOpts =
     <*> switch
       ( long "no-color"
           <> help "Do not use ANSI colors in report output"
+      )
+    <*> switch
+      ( short 'R'
+          <> long "reverse"
+          <> help "Pull from remote hosts instead of pushing to them"
       )
     <*> optional
       ( (\filters noBasic noDelete preserveAll protectTop opts ->
