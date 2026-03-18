@@ -96,6 +96,7 @@ data Alias = Alias
   , _aliasHost :: Text
   , _aliasMaxJobs :: Maybe Int
   , _aliasVariables :: Map Text Text
+  , _aliasOptions :: Maybe [Text]
   }
   deriving (Show, Eq)
 
@@ -116,6 +117,7 @@ instance FromJSON Alias where
     Alias "" host -- Name will be filled in from the Map key
       <$> v .:? "MaxJobs"
       <*> pure finalVariables
+      <*> v .:? "Options"
    where
     addContext msg = "Error parsing Alias: " ++ msg
   parseJSON _ = errorL "Error parsing Alias"
@@ -130,6 +132,7 @@ data HostRef = HostRef
   { _hostRefLogicalName :: Text
   , _hostRefActualHost :: (Text, Int) -- (hostName, maxJobs) - avoiding circular dependency
   , _hostRefVariables :: Map Text Text
+  , _hostRefOptions :: Maybe [Text] -- Per-host rsync options from alias
   }
   deriving (Show, Eq, Ord)
 

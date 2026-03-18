@@ -162,6 +162,7 @@ parseHostRef opts name =
                 { _hostRefLogicalName = baseName
                 , _hostRefActualHost = (actualName, finalJobs)
                 , _hostRefVariables = alias ^. aliasVariables
+                , _hostRefOptions = alias ^. aliasOptions
                 }
         Nothing ->
           let host = parseHost baseName
@@ -170,6 +171,7 @@ parseHostRef opts name =
                 { _hostRefLogicalName = baseName
                 , _hostRefActualHost = (baseName, finalJobs)
                 , _hostRefVariables = M.empty
+                , _hostRefOptions = Nothing
                 }
 
 {- | Interpolate all $variable references in a path using the provided variable map.
@@ -559,6 +561,7 @@ invokeRsync bnd src roDest host dest = do
          )
       <> args
       <> fromMaybe [] (roDest ^. rsyncOptions)
+      <> fromMaybe [] (bindingRemoteHost bnd ^. hostRefOptions)
       <> case bnd ^. bindingDirection of
            Push ->
              [ pack src
