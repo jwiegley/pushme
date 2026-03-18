@@ -48,7 +48,12 @@ genRsyncOptions =
     <*> genMaybeText
     <*> Gen.bool
     <*> Gen.bool
-    <*> Gen.bool
+    <*> Gen.bool -- PreserveACLs
+    <*> Gen.bool -- PreserveXattrs
+    <*> Gen.bool -- PreserveAtimes
+    <*> Gen.bool -- PreserveCrtimes
+    <*> Gen.bool -- PreserveHardLinks
+    <*> Gen.bool -- PreserveExecutability
     <*> Gen.bool
     <*> genMaybeTextList
     <*> genMaybeTextList

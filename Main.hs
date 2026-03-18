@@ -81,14 +81,20 @@ decodeEnrichedOptions :: Map Text Value -> Parser (FilePath, RsyncOptions)
 decodeEnrichedOptions m =
   parseM (m ^. at "Path") >>= \case
     Nothing -> fail "Missing value for Path"
-    Just path ->
+    Just path -> do
+      preserveAll <- fromMaybe False <$> parseM (m ^. at "PreserveAttrs")
       (path,)
         <$> ( RsyncOptions
                 <$> parseM (m ^. at "Filters")
                 <*> parseM (m ^. at "ExtraFilters")
                 <*> (fromMaybe False <$> parseM (m ^. at "NoBasicOptions"))
                 <*> (fromMaybe False <$> parseM (m ^. at "NoDelete"))
-                <*> (fromMaybe False <$> parseM (m ^. at "PreserveAttrs"))
+                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveACLs"))
+                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveXattrs"))
+                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveAtimes"))
+                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveCrtimes"))
+                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveHardLinks"))
+                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveExecutability"))
                 <*> (fromMaybe False <$> parseM (m ^. at "ProtectTopLevel"))
                 <*> parseM (m ^. at "Options")
                 <*> parseM (m ^. at "ReceiveFrom")
@@ -459,7 +465,12 @@ invokeRsync bnd src roDest host dest = do
   rsyncArguments opts args =
     ["-a" | not (roDest ^. rsyncNoBasicOptions)]
       <> ["--delete" | not (roDest ^. rsyncNoDelete)]
-      <> ["-AXUNHE" | roDest ^. rsyncPreserveAttrs]
+      <> ["-A" | roDest ^. rsyncPreserveACLs]
+      <> ["-X" | roDest ^. rsyncPreserveXattrs]
+      <> ["-U" | roDest ^. rsyncPreserveAtimes]
+      <> ["-N" | roDest ^. rsyncPreserveCrtimes]
+      <> ["-H" | roDest ^. rsyncPreserveHardLinks]
+      <> ["-E" | roDest ^. rsyncPreserveExecutability]
       <> ["-n" | opts ^. optsDryRun]
       <> ( if opts ^. optsVerbose
              then ["-v"]

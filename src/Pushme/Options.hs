@@ -30,7 +30,12 @@ data RsyncOptions = RsyncOptions
   , _rsyncExtraFilters :: Maybe Text
   , _rsyncNoBasicOptions :: Bool
   , _rsyncNoDelete :: Bool
-  , _rsyncPreserveAttrs :: Bool
+  , _rsyncPreserveACLs :: Bool -- -A
+  , _rsyncPreserveXattrs :: Bool -- -X
+  , _rsyncPreserveAtimes :: Bool -- -U
+  , _rsyncPreserveCrtimes :: Bool -- -N
+  , _rsyncPreserveHardLinks :: Bool -- -H
+  , _rsyncPreserveExecutability :: Bool -- -E
   , _rsyncProtectTopLevel :: Bool
   , _rsyncOptions :: Maybe [Text]
   , _rsyncReceiveFrom :: Maybe [Text]
@@ -39,13 +44,19 @@ data RsyncOptions = RsyncOptions
   deriving (Show, Eq)
 
 instance FromJSON RsyncOptions where
-  parseJSON (Object v) =
+  parseJSON (Object v) = do
+    preserveAll <- v .:? "PreserveAttrs" .!= False
     RsyncOptions
       <$> v .:? "Filters"
       <*> v .:? "ExtraFilters"
       <*> v .:? "NoBasicOptions" .!= False
       <*> v .:? "NoDelete" .!= False
-      <*> v .:? "PreserveAttrs" .!= False
+      <*> v .:? "PreserveACLs" .!= preserveAll
+      <*> v .:? "PreserveXattrs" .!= preserveAll
+      <*> v .:? "PreserveAtimes" .!= preserveAll
+      <*> v .:? "PreserveCrtimes" .!= preserveAll
+      <*> v .:? "PreserveHardLinks" .!= preserveAll
+      <*> v .:? "PreserveExecutability" .!= preserveAll
       <*> v .:? "ProtectTopLevel" .!= False
       <*> v .:? "Options"
       <*> v .:? "ReceiveFrom"
@@ -53,18 +64,23 @@ instance FromJSON RsyncOptions where
   parseJSON _ = errorL "Error parsing Rsync"
 
 instance Semigroup RsyncOptions where
-  RsyncOptions a1 b1 c1 d1 e1 f1 g1 h1 i1
-    <> RsyncOptions a2 b2 c2 d2 e2 f2 g2 h2 i2 =
+  RsyncOptions a1 b1 c1 d1 e1 f1 g1 h1 i1 j1 k1 l1 m1 n1
+    <> RsyncOptions a2 b2 c2 d2 e2 f2 g2 h2 i2 j2 k2 l2 m2 n2 =
       RsyncOptions
-        (a2 <|> a1)
-        (combineFilters b1 b2)
-        (c2 || c1)
-        (d2 || d1)
-        (e2 || e1)
-        (f2 || f1)
-        (g2 <|> g1)
-        (h2 <|> h1)
-        (i2 && i1)
+        (a2 <|> a1) -- Filters
+        (combineFilters b1 b2) -- ExtraFilters
+        (c2 || c1) -- NoBasicOptions
+        (d2 || d1) -- NoDelete
+        (e2 || e1) -- PreserveACLs
+        (f2 || f1) -- PreserveXattrs
+        (g2 || g1) -- PreserveAtimes
+        (h2 || h1) -- PreserveCrtimes
+        (i2 || i1) -- PreserveHardLinks
+        (j2 || j1) -- PreserveExecutability
+        (k2 || k1) -- ProtectTopLevel
+        (l2 <|> l1) -- Options
+        (m2 <|> m1) -- ReceiveFrom
+        (n2 && n1) -- Active
 
 combineFilters :: Maybe Text -> Maybe Text -> Maybe Text
 combineFilters Nothing Nothing = Nothing
@@ -220,14 +236,16 @@ pushmeOpts =
           <> help "Do not use ANSI colors in report output"
       )
     <*> optional
-      ( RsyncOptions
+      ( (\filters noBasic noDelete preserveAll protectTop opts ->
+           RsyncOptions filters Nothing noBasic noDelete
+             preserveAll preserveAll preserveAll preserveAll preserveAll preserveAll
+             protectTop opts Nothing True)
           <$> optional
             ( strOption
                 ( long "rsync-filters"
                     <> help "rsync filters to pass using --include-from"
                 )
             )
-          <*> pure Nothing
           <*> switch
             ( long "rsync-no-basic-options"
                 <> help "Do not pass -a (and possibly other basic options)"
@@ -238,7 +256,7 @@ pushmeOpts =
             )
           <*> switch
             ( long "rsync-preserve-attrs"
-                <> help "Preserve all attributes (i.e., pass -AXUNHE)"
+                <> help "Preserve all attributes (-AXUNHE)"
             )
           <*> switch
             ( long "rsync-protect-top-level"
@@ -251,8 +269,6 @@ pushmeOpts =
                     <> help "Space-separated list of options to pass to rsync"
                 )
             )
-          <*> pure Nothing
-          <*> pure True
       )
     <*> pure M.empty -- Aliases come from config file, not CLI
     <*> many (argument (eitherReader Right) (metavar "ARGS"))
