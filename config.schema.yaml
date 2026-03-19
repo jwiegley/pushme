@@ -24,6 +24,9 @@ Verbose: bool(required=False)
 # Optional flag to disable color output
 NoColor: bool(required=False)
 
+# Optional: pull from remote hosts instead of pushing to them
+Reverse: bool(required=False)
+
 # Optional global rsync options applied to all transfers
 GlobalOptions: include('rsync-options', required=False)
 
@@ -47,6 +50,9 @@ alias:
   # Optional: legacy field for prefix variable (auto-mapped to Variables.prefix)
   Prefix: str(required=False)
 
+  # Optional: additional rsync flags passed for transfers involving this host
+  Options: list(str(), required=False)
+
 ---
 # Reusable schema for RsyncOptions
 # Used in GlobalOptions, Fileset Common, and Store definitions
@@ -54,14 +60,35 @@ rsync-options:
   # Optional: rsync filter rules (multiline string)
   Filters: str(required=False)
 
+  # Optional: additional filter rules (merged additively across config levels)
+  ExtraFilters: str(required=False)
+
   # Optional: don't pass -a flag to rsync
   NoBasicOptions: bool(required=False)
 
   # Optional: don't pass --delete flag to rsync
   NoDelete: bool(required=False)
 
-  # Optional: pass -AXUNHE to preserve all attributes
+  # Optional: shorthand to set all six preserve flags at once
   PreserveAttrs: bool(required=False)
+
+  # Optional: preserve ACLs (-A flag)
+  PreserveACLs: bool(required=False)
+
+  # Optional: preserve extended attributes (-X flag)
+  PreserveXattrs: bool(required=False)
+
+  # Optional: preserve access times (-U flag)
+  PreserveAtimes: bool(required=False)
+
+  # Optional: preserve creation times (-N flag)
+  PreserveCrtimes: bool(required=False)
+
+  # Optional: preserve hard links (-H flag)
+  PreserveHardLinks: bool(required=False)
+
+  # Optional: preserve executability (-E flag)
+  PreserveExecutability: bool(required=False)
 
   # Optional: add --filter "P /*" to protect top-level items
   ProtectTopLevel: bool(required=False)
