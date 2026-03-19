@@ -30,12 +30,12 @@ data RsyncOptions = RsyncOptions
   , _rsyncExtraFilters :: Maybe Text
   , _rsyncNoBasicOptions :: Bool
   , _rsyncNoDelete :: Bool
-  , _rsyncPreserveACLs :: Bool -- -A
-  , _rsyncPreserveXattrs :: Bool -- -X
-  , _rsyncPreserveAtimes :: Bool -- -U
-  , _rsyncPreserveCrtimes :: Bool -- -N
-  , _rsyncPreserveHardLinks :: Bool -- -H
-  , _rsyncPreserveExecutability :: Bool -- -E
+  , _rsyncPreserveACLs :: Maybe Bool -- -A
+  , _rsyncPreserveXattrs :: Maybe Bool -- -X
+  , _rsyncPreserveAtimes :: Maybe Bool -- -U
+  , _rsyncPreserveCrtimes :: Maybe Bool -- -N
+  , _rsyncPreserveHardLinks :: Maybe Bool -- -H
+  , _rsyncPreserveExecutability :: Maybe Bool -- -E
   , _rsyncProtectTopLevel :: Bool
   , _rsyncOptions :: Maybe [Text]
   , _rsyncReceiveFrom :: Maybe [Text]
@@ -45,18 +45,18 @@ data RsyncOptions = RsyncOptions
 
 instance FromJSON RsyncOptions where
   parseJSON (Object v) = do
-    preserveAll <- v .:? "PreserveAttrs" .!= False
+    preserveAll <- v .:? "PreserveAttrs"
     RsyncOptions
       <$> v .:? "Filters"
       <*> v .:? "ExtraFilters"
       <*> v .:? "NoBasicOptions" .!= False
       <*> v .:? "NoDelete" .!= False
-      <*> v .:? "PreserveACLs" .!= preserveAll
-      <*> v .:? "PreserveXattrs" .!= preserveAll
-      <*> v .:? "PreserveAtimes" .!= preserveAll
-      <*> v .:? "PreserveCrtimes" .!= preserveAll
-      <*> v .:? "PreserveHardLinks" .!= preserveAll
-      <*> v .:? "PreserveExecutability" .!= preserveAll
+      <*> ((<|> preserveAll) <$> v .:? "PreserveACLs")
+      <*> ((<|> preserveAll) <$> v .:? "PreserveXattrs")
+      <*> ((<|> preserveAll) <$> v .:? "PreserveAtimes")
+      <*> ((<|> preserveAll) <$> v .:? "PreserveCrtimes")
+      <*> ((<|> preserveAll) <$> v .:? "PreserveHardLinks")
+      <*> ((<|> preserveAll) <$> v .:? "PreserveExecutability")
       <*> v .:? "ProtectTopLevel" .!= False
       <*> v .:? "Options"
       <*> v .:? "ReceiveFrom"
@@ -71,12 +71,12 @@ instance Semigroup RsyncOptions where
         (combineFilters b1 b2) -- ExtraFilters
         (c2 || c1) -- NoBasicOptions
         (d2 || d1) -- NoDelete
-        (e2 || e1) -- PreserveACLs
-        (f2 || f1) -- PreserveXattrs
-        (g2 || g1) -- PreserveAtimes
-        (h2 || h1) -- PreserveCrtimes
-        (i2 || i1) -- PreserveHardLinks
-        (j2 || j1) -- PreserveExecutability
+        (e2 <|> e1) -- PreserveACLs
+        (f2 <|> f1) -- PreserveXattrs
+        (g2 <|> g1) -- PreserveAtimes
+        (h2 <|> h1) -- PreserveCrtimes
+        (i2 <|> i1) -- PreserveHardLinks
+        (j2 <|> j1) -- PreserveExecutability
         (k2 || k1) -- ProtectTopLevel
         (l2 <|> l1) -- Options
         (m2 <|> m1) -- ReceiveFrom
@@ -247,10 +247,24 @@ pushmeOpts =
           <> help "Pull from remote hosts instead of pushing to them"
       )
     <*> optional
-      ( (\filters noBasic noDelete preserveAll protectTop opts ->
-           RsyncOptions filters Nothing noBasic noDelete
-             preserveAll preserveAll preserveAll preserveAll preserveAll preserveAll
-             protectTop opts Nothing True)
+      ( ( \filters noBasic noDelete preserveAll protectTop opts ->
+            let mPreserve = if preserveAll then Just True else Nothing
+             in RsyncOptions
+                  filters
+                  Nothing
+                  noBasic
+                  noDelete
+                  mPreserve
+                  mPreserve
+                  mPreserve
+                  mPreserve
+                  mPreserve
+                  mPreserve
+                  protectTop
+                  opts
+                  Nothing
+                  True
+        )
           <$> optional
             ( strOption
                 ( long "rsync-filters"

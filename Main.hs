@@ -85,19 +85,19 @@ decodeEnrichedOptions m =
   parseM (m ^. at "Path") >>= \case
     Nothing -> fail "Missing value for Path"
     Just path -> do
-      preserveAll <- fromMaybe False <$> parseM (m ^. at "PreserveAttrs")
+      preserveAll <- parseM (m ^. at "PreserveAttrs")
       (path,)
         <$> ( RsyncOptions
                 <$> parseM (m ^. at "Filters")
                 <*> parseM (m ^. at "ExtraFilters")
                 <*> (fromMaybe False <$> parseM (m ^. at "NoBasicOptions"))
                 <*> (fromMaybe False <$> parseM (m ^. at "NoDelete"))
-                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveACLs"))
-                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveXattrs"))
-                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveAtimes"))
-                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveCrtimes"))
-                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveHardLinks"))
-                <*> (fromMaybe preserveAll <$> parseM (m ^. at "PreserveExecutability"))
+                <*> ((<|> preserveAll) <$> parseM (m ^. at "PreserveACLs"))
+                <*> ((<|> preserveAll) <$> parseM (m ^. at "PreserveXattrs"))
+                <*> ((<|> preserveAll) <$> parseM (m ^. at "PreserveAtimes"))
+                <*> ((<|> preserveAll) <$> parseM (m ^. at "PreserveCrtimes"))
+                <*> ((<|> preserveAll) <$> parseM (m ^. at "PreserveHardLinks"))
+                <*> ((<|> preserveAll) <$> parseM (m ^. at "PreserveExecutability"))
                 <*> (fromMaybe False <$> parseM (m ^. at "ProtectTopLevel"))
                 <*> parseM (m ^. at "Options")
                 <*> parseM (m ^. at "ReceiveFrom")
@@ -552,12 +552,12 @@ invokeRsync bnd src roDest host dest = do
   rsyncArguments opts args =
     ["-a" | not (roDest ^. rsyncNoBasicOptions)]
       <> ["--delete" | not (roDest ^. rsyncNoDelete)]
-      <> ["-A" | roDest ^. rsyncPreserveACLs]
-      <> ["-X" | roDest ^. rsyncPreserveXattrs]
-      <> ["-U" | roDest ^. rsyncPreserveAtimes]
-      <> ["-N" | roDest ^. rsyncPreserveCrtimes]
-      <> ["-H" | roDest ^. rsyncPreserveHardLinks]
-      <> ["-E" | roDest ^. rsyncPreserveExecutability]
+      <> ["-A" | roDest ^. rsyncPreserveACLs == Just True]
+      <> ["-X" | roDest ^. rsyncPreserveXattrs == Just True]
+      <> ["-U" | roDest ^. rsyncPreserveAtimes == Just True]
+      <> ["-N" | roDest ^. rsyncPreserveCrtimes == Just True]
+      <> ["-H" | roDest ^. rsyncPreserveHardLinks == Just True]
+      <> ["-E" | roDest ^. rsyncPreserveExecutability == Just True]
       <> ["-n" | opts ^. optsDryRun]
       <> ( if opts ^. optsVerbose
              then ["-v"]
@@ -567,18 +567,18 @@ invokeRsync bnd src roDest host dest = do
       <> fromMaybe [] (roDest ^. rsyncOptions)
       <> fromMaybe [] (bindingRemoteHost bnd ^. hostRefOptions)
       <> case bnd ^. bindingDirection of
-           Push ->
-             [ pack src
-             , case host ^? _Just . hostName of
-                 Nothing -> pack dest
-                 Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack dest))
-             ]
-           Pull ->
-             [ case host ^? _Just . hostName of
-                 Nothing -> pack src
-                 Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack src))
-             , pack dest
-             ]
+        Push ->
+          [ pack src
+          , case host ^? _Just . hostName of
+              Nothing -> pack dest
+              Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack dest))
+          ]
+        Pull ->
+          [ case host ^? _Just . hostName of
+              Nothing -> pack src
+              Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack src))
+          , pack dest
+          ]
 
 doRsync :: Text -> [Text] -> App TransferStatus
 doRsync label args = do

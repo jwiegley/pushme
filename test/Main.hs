@@ -41,6 +41,9 @@ genMaybeText = Gen.maybe genText
 genMaybeTextList :: Gen (Maybe [Text])
 genMaybeTextList = Gen.maybe (Gen.list (Range.linear 0 5) genText)
 
+genMaybeBool :: Gen (Maybe Bool)
+genMaybeBool = Gen.maybe Gen.bool
+
 genRsyncOptions :: Gen RsyncOptions
 genRsyncOptions =
   RsyncOptions
@@ -48,12 +51,12 @@ genRsyncOptions =
     <*> genMaybeText
     <*> Gen.bool
     <*> Gen.bool
-    <*> Gen.bool -- PreserveACLs
-    <*> Gen.bool -- PreserveXattrs
-    <*> Gen.bool -- PreserveAtimes
-    <*> Gen.bool -- PreserveCrtimes
-    <*> Gen.bool -- PreserveHardLinks
-    <*> Gen.bool -- PreserveExecutability
+    <*> genMaybeBool -- PreserveACLs
+    <*> genMaybeBool -- PreserveXattrs
+    <*> genMaybeBool -- PreserveAtimes
+    <*> genMaybeBool -- PreserveCrtimes
+    <*> genMaybeBool -- PreserveHardLinks
+    <*> genMaybeBool -- PreserveExecutability
     <*> Gen.bool
     <*> genMaybeTextList
     <*> genMaybeTextList
