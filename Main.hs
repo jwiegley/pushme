@@ -551,6 +551,7 @@ invokeRsync bnd src roDest host dest = do
   rsyncArguments :: Options -> [Text] -> [Text]
   rsyncArguments opts args =
     ["-a" | not (roDest ^. rsyncNoBasicOptions)]
+      <> ["-s"]
       <> ["--delete" | not (roDest ^. rsyncNoDelete)]
       <> ["-A" | roDest ^. rsyncPreserveACLs == Just True]
       <> ["-X" | roDest ^. rsyncPreserveXattrs == Just True]
@@ -571,12 +572,12 @@ invokeRsync bnd src roDest host dest = do
           [ pack src
           , case host ^? _Just . hostName of
               Nothing -> pack dest
-              Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack dest))
+              Just h -> h <> ":" <> pack dest
           ]
         Pull ->
           [ case host ^? _Just . hostName of
               Nothing -> pack src
-              Just h -> h <> ":" <> T.intercalate "\\ " (T.words (pack src))
+              Just h -> h <> ":" <> pack src
           , pack dest
           ]
 
