@@ -1,24 +1,21 @@
-Name:     'src'
+Name:     'work/translation'
 Priority: 50
 Classes:
   - 'small'
 
 Stores:
   hera:
-    Path: $home/src
+    Path: $home/work/translation
     ReceiveFrom:
       - clio
-    ExtraFilters: |
-      - /ledger/
-      - /stock-trader/
 
   clio:
-    Path: $home/src
+    Path: $home/work/translation
     ReceiveFrom:
       - hera
 
   tank:
-    Path: $tank/src
+    Path: $tank/work/translation
     PreserveXattrs: false
     ReceiveFrom:
       - hera
@@ -44,20 +41,23 @@ Common:
     - .*.cache
     - .cabal*
     - .cargo-home/
+    - .cargo/
     - .envrc
     - .ghc.*
+    - .ghcup/
+    - .mypy_cache/
+    - .rustup/
     - .vagrant/
     - .venv/
-    - /dot-emacs/.cache/
-    - /dot-emacs/eln-cache/
     - MAlonzo/
     - Makefile.coq
     - Makefile.coq.conf
-    - build-debug/
+    - _deps/
     - build/
     - cabal.project.local*
     - dist-newstyle/
     - dist/
+    - gen/
     - node_modules/
     - result
     - result-*

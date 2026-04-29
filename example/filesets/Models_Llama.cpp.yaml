@@ -1,4 +1,4 @@
-Name:     'Models'
+Name:     'Models/Llama.cpp'
 Priority: 110
 Classes:
   - 'large'

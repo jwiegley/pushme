@@ -1,0 +1,21 @@
+Name:     'Models/oMLX'
+Priority: 110
+Classes:
+  - 'large'
+
+Stores:
+  clio:
+    Path: $home/.cache/omlx/models
+    ReceiveFrom: []
+
+  hera:
+    Path: $home/.cache/omlx/models
+    ReceiveFrom: []
+
+  tank:
+    Path: $tank/Models/oMLX
+    ProtectTopLevel: true
+    Options:
+      - "--hard-links"
+    ReceiveFrom:
+      - hera

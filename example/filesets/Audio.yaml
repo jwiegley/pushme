@@ -8,7 +8,12 @@ Stores:
     Path: $ext/Audio
     ReceiveFrom: []
 
+  clio:
+    Path: /Users/johnw/Audio
+    ReceiveFrom: []
+
   tank:
     Path: $tank/Audio
     ReceiveFrom:
+      - clio
       - hera

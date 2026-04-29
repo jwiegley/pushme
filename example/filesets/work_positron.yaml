@@ -1,28 +1,40 @@
-Name:     'src'
+Name:     'work/positron'
 Priority: 50
 Classes:
   - 'small'
 
 Stores:
   hera:
-    Path: $home/src
+    Path: $home/work/positron
     ReceiveFrom:
+      - andoria
       - clio
-    ExtraFilters: |
-      - /ledger/
-      - /stock-trader/
+    Options:
+      - "--compress"
+      - "--compress-choice=lz4"
+      - "--compress-level=9"
 
   clio:
-    Path: $home/src
+    Path: $home/work/positron
     ReceiveFrom:
+      - andoria
       - hera
+    Options:
+      - "--compress"
+      - "--compress-choice=lz4"
+      - "--compress-level=9"
 
   tank:
-    Path: $tank/src
+    Path: $tank/work/positron
     PreserveXattrs: false
     ReceiveFrom:
       - hera
       - clio
+
+  andoria:
+    Path: $home
+    PreserveXattrs: false
+    ReceiveFrom: []
 
 Common:
   PreserveAttrs: true
@@ -30,6 +42,7 @@ Common:
   Filters: |
     - *.agdai
     - *.d
+    - *.gguf
     - *.glob
     - *.hi
     - *.o
@@ -42,22 +55,36 @@ Common:
     - *~
     - .*.aux
     - .*.cache
+    - .bun/
     - .cabal*
+    - .cabal/
+    - .cache/
     - .cargo-home/
+    - .cargo/
     - .envrc
     - .ghc.*
+    - .ghcup/
+    - .ghcup/
+    - .mypy_cache/
+    - .npm/
+    - .nvm/
+    - .rustup/
     - .vagrant/
     - .venv/
-    - /dot-emacs/.cache/
-    - /dot-emacs/eln-cache/
+    - /.local/lib/
+    - /.local/share/cargo/
+    - /.local/share/rustup/
+    - /.local/share/uv/
+    - /.local/state/
     - MAlonzo/
     - Makefile.coq
     - Makefile.coq.conf
-    - build-debug/
+    - _deps/
     - build/
     - cabal.project.local*
     - dist-newstyle/
     - dist/
+    - gen/
     - node_modules/
     - result
     - result-*

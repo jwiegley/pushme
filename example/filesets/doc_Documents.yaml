@@ -1,21 +1,21 @@
-Name:     'doc'
+Name:     'doc/Documents.dtBase2'
 Priority: 10
 Classes:
   - 'small'
 
 Stores:
   hera:
-    Path: $home/doc
+    Path: $home/doc/Documents.dtBase2
     ReceiveFrom:
       - clio
 
   clio:
-    Path: $home/doc
+    Path: $home/doc/Documents.dtBase2
     ReceiveFrom:
       - hera
 
   tank:
-    Path: $tank/doc
+    Path: $tank/doc/Documents.dtBase2
     PreserveXattrs: false
     ReceiveFrom:
       - hera
@@ -25,6 +25,4 @@ Common:
   PreserveAttrs: true
   PreserveCrtimes: false
   Filters: |
-    - /Documents.dtBase2/
-    - /Files.dtBase2/
-    - /*.dtBase2/Backup*
+    - /Backup*

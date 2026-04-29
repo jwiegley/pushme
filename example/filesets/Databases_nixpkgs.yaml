@@ -1,21 +1,21 @@
-Name:     'doc'
+Name:     'Databases/nixpkgs'
 Priority: 10
 Classes:
-  - 'small'
+  - 'large'
 
 Stores:
   hera:
-    Path: $home/doc
+    Path: $home/Databases/nixpkgs
     ReceiveFrom:
       - clio
 
   clio:
-    Path: $home/doc
+    Path: $home/Databases/nixpkgs
     ReceiveFrom:
       - hera
 
   tank:
-    Path: $tank/doc
+    Path: $tank/Databases/nixpkgs
     PreserveXattrs: false
     ReceiveFrom:
       - hera
@@ -24,7 +24,3 @@ Stores:
 Common:
   PreserveAttrs: true
   PreserveCrtimes: false
-  Filters: |
-    - /Documents.dtBase2/
-    - /Files.dtBase2/
-    - /*.dtBase2/Backup*

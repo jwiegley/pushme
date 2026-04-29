@@ -1,20 +1,24 @@
 SIUnits: true
+
 GlobalOptions:
   Options:
     - "--include-from=/Users/johnw/.config/ignore.lst"
 
 Aliases:
-  # tank:
-  #   Host: vulcan
-  #   MaxJobs: 1
-  #   Variables:
-  #     tank: /tank
-
   tank:
-    Host: hera
+    Host: vulcan
     MaxJobs: 1
     Variables:
-      tank: /Volumes/tank
+      tank: /tank
+      gdrive: /gdrive
+    Options:
+      - "--rsync-path=/etc/profiles/per-user/johnw/bin/rsync"
+
+  # tank:
+  #   Host: hera
+  #   MaxJobs: 1
+  #   Variables:
+  #     tank: /Volumes/tank
 
   hera:
     Host: hera
@@ -22,6 +26,7 @@ Aliases:
     Variables:
       home: /Users/johnw
       ext: /Volumes/ext
+      studio: /Volumes/studio
 
   clio:
     Host: clio
@@ -34,3 +39,29 @@ Aliases:
     MaxJobs: 6
     Variables:
       home: /home/johnw
+    Options:
+      - "--rsync-path=/etc/profiles/per-user/johnw/bin/rsync"
+
+  vps:
+    Host: vps
+    MaxJobs: 2
+    Variables:
+      home: /home/johnw
+    Options:
+      - "--rsync-path=/etc/profiles/per-user/johnw/bin/rsync"
+
+  andoria:
+    Host: andoria-08
+    MaxJobs: 1
+    Variables:
+      home: /home/jwiegley
+    Options:
+      - "--rsync-path=/home/jwiegley/.nix-profile/bin/rsync"
+
+  git-ai:
+    Host: git-ai
+    MaxJobs: 1
+    Variables:
+      home: /home/ubuntu
+    Options:
+      - "--rsync-path=/usr/bin/rsync"

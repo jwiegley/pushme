@@ -1,4 +1,4 @@
-Name:     'HuggingFace'
+Name:     'Models/HuggingFace'
 Priority: 110
 Classes:
   - 'large'
@@ -8,9 +8,9 @@ Stores:
     Path: $home/.cache/huggingface/hub
     ReceiveFrom: []
 
-  hera:
-    Path: $home/.cache/huggingface/hub
-    ReceiveFrom: []
+  # hera:
+  #   Path: $home/.cache/huggingface/hub
+  #   ReceiveFrom: []
 
   tank:
     Path: $tank/Models/HuggingFace

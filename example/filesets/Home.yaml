@@ -8,11 +8,25 @@ Stores:
     Path: $home
     ReceiveFrom:
       - clio
+    ExtraFilters: |
+      - /.claude
+      - /.config/gh/hosts.yml
+      - /.config/claude/personal/
+      + /.config/claude/personal/settings.json
+      - /.config/claude/git-ai/
+      + /.config/claude/git-ai/settings.json
+      - /mssql/
 
   clio:
     Path: $home
     ReceiveFrom:
       - hera
+    ExtraFilters: |
+      - /.claude
+      - /.config/gh/hosts.yml
+      - /.config/claude/positron/
+      + /.config/claude/positron/settings.json
+      - /mssql/
 
   tank:
     Path: $tank/Home
@@ -20,6 +34,27 @@ Stores:
       - /.Spotlight-V100/
       - /.Trash/
       - /.cache/
+      - /.npm/
+      - /.config/claude/*/.claude.json
+      - /.config/claude/*/.claude.json.*
+      - /.config/claude/*/.credentials.json
+      - /.config/claude/*/backups/
+      - /.config/claude/*/cache/changelog.md
+      - /.config/claude/*/config/notification_states.json
+      - /.config/claude/*/debug/
+      - /.config/claude/*/file-history/
+      - /.config/claude/*/history.jsonl
+      - /.config/claude/*/ide/
+      - /.config/claude/*/image-cache/
+      - /.config/claude/*/paste-cache/
+      - /.config/claude/*/plans/
+      - /.config/claude/*/projects/
+      - /.config/claude/*/shell-snapshots/
+      - /.config/claude/*/statsig/
+      - /.config/claude/*/stats-cache.json
+      - /.config/claude/*/tasks/
+      - /.config/claude/*/teams/
+      - /.config/claude/*/todos/
       - /.local/share/cabal/
       - /.local/share/cargo/
       - /.local/share/chainweb*
@@ -35,6 +70,7 @@ Stores:
       - /.local/share/rustup/
       - /.local/share/vagrant/
       - /.local/share/Trash/
+      - /.local/state/
       - /Applications/
       - /Audio
       - /Databases/
@@ -44,6 +80,8 @@ Stores:
       - /Drafts
       - /Hera
       - /Inbox
+      - /Library/Application Support/Claude/vm_bundles/
+      - /Library/IDimager Systems, Inc./Catalog/photosupreme.thumbs.db
       - /Library/Application Support/CloudDocs/
       - /Library/Application Support/FileProvider/
       - /Library/Application Support/Steam/steamapps/common/
@@ -56,6 +94,7 @@ Stores:
       - /Library/DuetExpertCenter/
       - /Library/Group Containers/
       - /Library/Mail/
+      - /Library/Messages/Caches/
       - /Library/Metadata/
       - /Library/PersonalizationPortrait/
       - /Library/Thunderbird/
@@ -80,14 +119,41 @@ Stores:
       - /src/
       - /clio/
       - /hera/
+      - /work/
     ReceiveFrom:
       - hera
       - clio
 
 Common:
   Filters: |
+    + /.claude.json
+    + /.claude.json.backup*
+    + /.cli-proxy-api
+    + /.ssh/
+    - /.ssh/config
+    + /.usr_app_ncr.dat
     + /.config/
     - /.config/aspell/config
+    - /.config/claude/*/.claude.json
+    - /.config/claude/*/.claude.json.*
+    - /.config/claude/*/.credentials.json
+    - /.config/claude/*/backups/
+    - /.config/claude/*/cache/changelog.md
+    - /.config/claude/*/config/notification_states.json
+    - /.config/claude/*/debug/
+    - /.config/claude/*/file-history/
+    - /.config/claude/*/history.jsonl
+    - /.config/claude/*/ide/
+    - /.config/claude/*/image-cache/
+    - /.config/claude/*/paste-cache/
+    - /.config/claude/*/plans/
+    - /.config/claude/*/projects/
+    - /.config/claude/*/shell-snapshots/
+    - /.config/claude/*/statsig/
+    - /.config/claude/*/stats-cache.json
+    - /.config/claude/*/tasks/
+    - /.config/claude/*/teams/
+    - /.config/claude/*/todos/
     - /.config/configstore/
     - /.config/dbvis/
     - /.config/dfx/
@@ -125,6 +191,7 @@ Common:
     - /.local/share/cargo/
     - /.local/share/chainweb*
     - /.local/share/chainweb*/
+    - /.local/share/claude-vault/
     - /.local/share/diffusionbee
     - /.local/share/direnv/
     - /.local/share/docker/
@@ -137,6 +204,7 @@ Common:
     - /.local/share/nix/
     - /.local/share/nltk/
     - /.local/share/ollama/
+    - /.local/share/opencode/opencode.*
     - /.local/share/recoll/
     - /.local/share/rustup/
     - /.local/share/stardict/
@@ -144,10 +212,13 @@ Common:
     - /.local/share/vagrant/
     - /.local/share/ykman/
     - /.local/state/
-    + /.ssh/
-    - /.ssh/config
-    + /.usr_app_ncr.dat
     + /Library/
+    + /Library/FontCollections/
+    + /Library/IDimager Systems, Inc./
+    + /Library/Keyboard Layouts/
+    + /Library/Preferences/
+    + /Library/Fonts/
+    - /Library/Fonts/.home-manager-fonts-version
     + /Library/Application Support/
     + /Library/Application Support/Affinity Photo 2/
     + /Library/Application Support/Anki/
@@ -156,12 +227,11 @@ Common:
     + /Library/Application Support/Choosy/
     + /Library/Application Support/DEVONthink/
     + /Library/Application Support/DEVONthink/Inbox*/
+    - /Library/Application Support/DEVONthink/Registration.plist
     - /Library/Application Support/DEVONthink/*
     - /Library/Application Support/DEVONthink/*/
     - /Library/Application Support/DEVONthink/.*
     - /Library/Application Support/DEVONthink/.*/
-    - /Library/Application Support/DiffusionBee/
-    - /Library/Application Support/Dungeon Crawl Stone Soup/
     + /Library/Application Support/ExpanDrive/
     + /Library/Application Support/gzdoom/
     + /Library/Application Support/LaunchBar/
@@ -170,10 +240,6 @@ Common:
     + /Library/Application Support/LM Studio/config.json
     + /Library/Application Support/LM Studio/Preferences
     + /Library/Application Support/LM Studio/settings.json
-    - /Library/Application Support/LM Studio/*
-    - /Library/Application Support/LM Studio/*/
-    - /Library/Application Support/LM Studio/.*
-    - /Library/Application Support/LM Studio/.*/
     + /Library/Application Support/Mellel 6/
     + /Library/Application Support/Soulver/
     + /Library/Application Support/Terraria/
@@ -183,13 +249,6 @@ Common:
     - /Library/Application Support/*/
     - /Library/Application Support/.*
     - /Library/Application Support/.*/
-    - /Library/CloudStorage/
-    + /Library/FontCollections/
-    + /Library/Fonts/
-    - /Library/Fonts/.home-manager-fonts-version
-    + /Library/IDimager Systems, Inc./
-    + /Library/Keyboard Layouts/
-    + /Library/Preferences/
     + /Library/Preferences/ai.elementlabs.lmstudio.plist
     + /Library/Preferences/app.soulver.mac.plist
     + /Library/Preferences/at.obdev.LaunchBar.plist

@@ -12,3 +12,5 @@ Stores:
     Path: $tank/Photos
     ReceiveFrom:
       - hera
+    Filters: |
+      - /Immich/

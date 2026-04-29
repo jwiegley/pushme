@@ -16,6 +16,16 @@ Stores:
 
   tank:
     Path: $tank/Databases
+    PreserveXattrs: false
     ReceiveFrom:
       - hera
       - clio
+
+Common:
+  PreserveAttrs: true
+  PreserveCrtimes: false
+  Filters: |
+    - /Apple II.dtBase2/
+    - /Faith.dtBase2/
+    - /Haskell.dtBase2/
+    - /*.dtBase2/Backup*
