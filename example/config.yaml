@@ -65,3 +65,40 @@ Aliases:
       home: /home/ubuntu
     Options:
       - "--rsync-path=/usr/bin/rsync"
+
+Filters:
+  srcFilters: |
+    - *.agdai
+    - *.d
+    - *.glob
+    - *.hi
+    - *.o
+    - *.vio
+    - *.viok
+    - *.vios
+    - *.vo
+    - *.vok
+    - *.vos
+    - *~
+    - .*.aux
+    - .*.cache
+    - .cabal*
+    - .cargo-home/
+    - .envrc
+    - .ghc.*
+    - .vagrant/
+    - .venv/
+    - /dot-emacs/.cache/
+    - /dot-emacs/eln-cache/
+    - MAlonzo/
+    - Makefile.coq
+    - Makefile.coq.conf
+    - build-debug/
+    - build/
+    - cabal.project.local*
+    - dist-newstyle/
+    - dist/
+    - node_modules/
+    - result
+    - result-*
+    - target/

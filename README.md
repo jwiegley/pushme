@@ -194,6 +194,21 @@ GlobalOptions:
   PreserveAttrs: true
   Options:
     - "--include-from=/Users/johnw/.config/ignore.lst"
+# Named filter sets can be referenced by Filters or ExtraFilters as $name
+Filters:
+  srcFilters: |
+    - *.o
+    - dist-newstyle/
+    - result
+    - result-*
+```
+
+Then a fileset can reuse that filter block anywhere `Filters` or
+`ExtraFilters` is accepted:
+
+```yaml
+Common:
+  Filters: $srcFilters
 ```
 
 ## Command-Line Options
