@@ -2,7 +2,10 @@
 
 module Main where
 
+import qualified Data.ByteString.Char8 as B
+import qualified Data.Map.Strict as M
 import Data.Text (Text)
+import Data.Yaml (ParseException, decodeEither')
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
@@ -27,6 +30,12 @@ tests =
     , testGroup
         "RsyncOptions Semigroup"
         [ testProperty "associative" prop_rsyncOptions_assoc
+        ]
+    , testGroup
+        "filter set references"
+        [ testProperty "interpolates a named filter set" prop_filterReference_exact
+        , testProperty "resolves Filters and ExtraFilters" prop_resolveRsyncFilterReferences
+        , testProperty "parses and resolves config filter sets" prop_optionsParseFilterSets
         ]
     ]
 
@@ -62,6 +71,24 @@ genRsyncOptions =
     <*> genMaybeTextList
     <*> Gen.bool
 
+emptyRsyncOptions :: RsyncOptions
+emptyRsyncOptions =
+  RsyncOptions
+    Nothing
+    Nothing
+    False
+    False
+    Nothing
+    Nothing
+    Nothing
+    Nothing
+    Nothing
+    Nothing
+    False
+    Nothing
+    Nothing
+    True
+
 -- combineFilters properties
 
 prop_combineFilters_leftId :: Property
@@ -95,3 +122,53 @@ prop_rsyncOptions_assoc = property $ do
   b <- forAll genRsyncOptions
   c <- forAll genRsyncOptions
   (a <> b) <> c === a <> (b <> c)
+
+-- Filter set reference properties
+
+prop_filterReference_exact :: Property
+prop_filterReference_exact =
+  property $
+    interpolateFilterReferences
+      (M.fromList [("srcFilters", "- dist/\n- result")])
+      "$srcFilters"
+      === "- dist/\n- result"
+
+prop_resolveRsyncFilterReferences :: Property
+prop_resolveRsyncFilterReferences = property $ do
+  let filterSets =
+        M.fromList
+          [ ("commonFilters", "- dist/")
+          , ("extraFilters", "- .cache/")
+          ]
+      resolved =
+        resolveRsyncFilterReferences
+          filterSets
+          emptyRsyncOptions
+            { _rsyncFilters = Just "$commonFilters"
+            , _rsyncExtraFilters = Just "- tmp/\n$extraFilters"
+            }
+  _rsyncFilters resolved === Just "- dist/"
+  _rsyncExtraFilters resolved === Just "- tmp/\n- .cache/"
+
+prop_optionsParseFilterSets :: Property
+prop_optionsParseFilterSets = property $
+  case decodeEither' configYaml :: Either ParseException Options of
+    Left err -> do
+      annotateShow err
+      failure
+    Right opts -> do
+      _optsFilterSets opts
+        === M.fromList [("srcFilters", "- dist/\n- result\n")]
+      fmap _rsyncFilters (_optsRsyncOpts (resolveOptionsFilterReferences opts))
+        === Just (Just "- dist/\n- result\n")
+ where
+  configYaml =
+    B.pack $
+      unlines
+        [ "Filters:"
+        , "  srcFilters: |"
+        , "    - dist/"
+        , "    - result"
+        , "GlobalOptions:"
+        , "  Filters: $srcFilters"
+        ]

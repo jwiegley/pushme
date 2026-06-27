@@ -251,7 +251,7 @@ main = withStdoutLogging do
   configOpts <-
     readYaml
       =<< expandPath (cmdLineOpts ^. optsConfigDir </> "config.yaml")
-  let opts = configOpts <> cmdLineOpts
+  let opts = resolveOptionsFilterReferences (configOpts <> cmdLineOpts)
 
   setLogLevel $ if opts ^. optsVerbose then LevelDebug else LevelInfo
   setLogTimeFormat "%H:%M:%S"
@@ -471,8 +471,16 @@ processBindings = do
           <> pack (opts ^. optsConfigDir)
           <> "filesets/<name>.yaml"
     directoryContents confD
-      >>= mapM readYaml . filter (\n -> takeExtension n == ".yaml")
+      >>= mapM (fmap (resolveFilesetFilterReferences opts) . readYaml)
+        . filter (\n -> takeExtension n == ".yaml")
       <&> M.fromList . map ((^. filesetName) &&& id)
+
+  resolveFilesetFilterReferences :: Options -> Fileset -> Fileset
+  resolveFilesetFilterReferences opts fs =
+    let filterSets = opts ^. optsFilterSets
+     in fs
+          & filesetStores . traverse . _2 %~ resolveRsyncFilterReferences filterSets
+          & filesetCommon . _Just %~ resolveRsyncFilterReferences filterSets
 
 checkDirectory :: Binding -> FilePath -> Bool -> App Bool
 checkDirectory _ path False =

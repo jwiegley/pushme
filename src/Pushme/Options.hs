@@ -14,6 +14,7 @@ import qualified Data.Map.Strict as M
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import Options.Applicative hiding (Success)
+import Text.Regex.Posix ((=~))
 
 version :: String
 version = "3.0.0"
@@ -90,6 +91,40 @@ combineFilters (Just a) (Just b) = Just (a <> "\n" <> b)
 
 makeLenses ''RsyncOptions
 
+{- | Interpolate all $filterSet references in rsync filter text.
+Variable names must match pattern: $[a-zA-Z_][a-zA-Z0-9_]*.
+-}
+interpolateFilterReferences :: Map Text Text -> Text -> Text
+interpolateFilterReferences filterSets filters
+  | "$" `T.isInfixOf` filters = foldl replaceFilter filters filterRefs
+  | otherwise = filters
+ where
+  varPattern :: String
+  varPattern = "\\$[a-zA-Z_][a-zA-Z0-9_]*"
+
+  filterRefs :: [String]
+  filterRefs =
+    [m | (m : _) <- unpack filters =~ varPattern :: [[String]]]
+
+  replaceFilter :: Text -> String -> Text
+  replaceFilter acc filterRef =
+    let filterName = pack $ drop 1 filterRef
+     in case M.lookup filterName filterSets of
+          Nothing ->
+            error $
+              "Filter contains undefined filter set "
+                <> filterRef
+                <> "\nAvailable filter sets: "
+                <> show (M.keys filterSets)
+          Just filterText ->
+            T.replace (pack filterRef) filterText acc
+
+resolveRsyncFilterReferences :: Map Text Text -> RsyncOptions -> RsyncOptions
+resolveRsyncFilterReferences filterSets opts =
+  opts
+    & rsyncFilters . _Just %~ interpolateFilterReferences filterSets
+    & rsyncExtraFilters . _Just %~ interpolateFilterReferences filterSets
+
 -- | Alias definition for host names with optional configuration overrides
 data Alias = Alias
   { _aliasName :: Text
@@ -149,6 +184,7 @@ data Options = Options
   , _optsReverse :: Bool
   , _optsRsyncOpts :: Maybe RsyncOptions
   , _optsAliases :: Map Text Alias
+  , _optsFilterSets :: Map Text Text
   , _optsCliArgs :: [String]
   }
   deriving (Show, Eq)
@@ -174,12 +210,13 @@ instance FromJSON Options where
       <*> v .:? "Reverse" .!= False
       <*> v .:? "GlobalOptions"
       <*> pure aliasMapWithNames
+      <*> v .:? "Filters" .!= M.empty
       <*> pure []
   parseJSON _ = errorL "Error parsing Options"
 
 instance Semigroup Options where
-  Options _a1 b1 c1 d1 e1 f1 g1 g1r h1 i1 j1
-    <> Options a2 b2 c2 d2 e2 f2 g2 g2r h2 i2 j2 =
+  Options _a1 b1 c1 d1 e1 f1 g1 g1r h1 i1 j1 k1
+    <> Options a2 b2 c2 d2 e2 f2 g2 g2r h2 i2 j2 k2 =
       Options
         a2
         (b2 || b1)
@@ -191,9 +228,15 @@ instance Semigroup Options where
         (g2r || g1r)
         (h2 <> h1)
         (i2 <> i1) -- Right-biased merge: right Map wins on key conflicts
-        (j2 <|> j1)
+        (j2 <> j1)
+        (k2 <|> k1)
 
 makeLenses ''Options
+
+resolveOptionsFilterReferences :: Options -> Options
+resolveOptionsFilterReferences opts =
+  opts
+    & optsRsyncOpts . _Just %~ resolveRsyncFilterReferences (opts ^. optsFilterSets)
 
 separated :: Char -> ReadM [Text]
 separated c = T.split (== c) <$> str
@@ -296,6 +339,7 @@ pushmeOpts =
             )
       )
     <*> pure M.empty -- Aliases come from config file, not CLI
+    <*> pure M.empty -- Filter sets come from config file, not CLI
     <*> many (argument (eitherReader Right) (metavar "ARGS"))
 
 optionsDefinition :: ParserInfo Options

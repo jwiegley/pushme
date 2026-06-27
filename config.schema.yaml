@@ -30,6 +30,9 @@ Reverse: bool(required=False)
 # Optional global rsync options applied to all transfers
 GlobalOptions: include('rsync-options', required=False)
 
+# Optional named rsync filter sets reusable from Filters/ExtraFilters
+Filters: map(str(), required=False)
+
 # Optional map of alias definitions
 # Keys are alias names, values are Alias objects
 Aliases: map(include('alias'), required=False)
