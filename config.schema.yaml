@@ -63,6 +63,12 @@ alias:
   #   SshOptions: ["-F", "/home/johnw/.config/pushme/ssh_config"]
   SshOptions: list(str(), required=False)
 
+  # Optional (default true): probe the remote directory with `test -d` before
+  # syncing. Set false for hosts whose key is restricted to a forced rsync-only
+  # command, where `test` is refused and the probe would otherwise fail, making
+  # every sync a silent no-op.
+  CheckRemoteDirectory: bool(required=False)
+
 ---
 # Reusable schema for RsyncOptions
 # Used in GlobalOptions, Fileset Common, and Store definitions

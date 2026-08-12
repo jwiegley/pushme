@@ -153,6 +153,8 @@ data Host = Host
   {- ^ Arguments placed before the hostname in pushme's own ssh calls.
   Only reachable via an alias; a bare hostname gets the empty list.
   -}
+  , _hostCheckRemoteDir :: Bool
+  -- ^ Whether 'checkDirectory' may probe this host with @test -d@.
   }
   deriving (Show, Eq, Ord)
 
@@ -160,8 +162,8 @@ makeLenses ''Host
 
 parseHost :: Text -> Host
 parseHost name = case T.split (== '@') name of
-  [n] -> Host n 1 []
-  [n, j] -> Host n (read (unpack j)) []
+  [n] -> Host n 1 [] True
+  [n, j] -> Host n (read (unpack j)) [] True
   _ -> errorL $ "Cannot parse hostname: " <> name
 
 -- | Extract Host from HostRef for compatibility
@@ -172,6 +174,7 @@ hostFromRef ref =
         name
         jobs
         (fromMaybe [] (ref ^. hostRefSshOptions))
+        (fromMaybe True (ref ^. hostRefCheckRemoteDir))
 
 {- | Parse a host reference from CLI argument, checking aliases first.
 Supports @N suffix for overriding MaxJobs on both raw hostnames and aliases.
@@ -199,6 +202,7 @@ parseHostRef opts name =
                 , _hostRefVariables = alias ^. aliasVariables
                 , _hostRefOptions = alias ^. aliasOptions
                 , _hostRefSshOptions = alias ^. aliasSshOptions
+                , _hostRefCheckRemoteDir = alias ^. aliasCheckRemoteDir
                 }
         Nothing ->
           let host = parseHost baseName
@@ -209,6 +213,7 @@ parseHostRef opts name =
                 , _hostRefVariables = M.empty
                 , _hostRefOptions = Nothing
                 , _hostRefSshOptions = Nothing
+                , _hostRefCheckRemoteDir = Nothing
                 }
 
 {- | Interpolate all $variable references in a path using the provided variable map.
@@ -535,6 +540,14 @@ checkDirectory _ path False =
   liftIO $ doesDirectoryExist path
 checkDirectory (isLocal -> True) path True =
   liftIO $ doesDirectoryExist path
+-- A host configured with @CheckRemoteDirectory: false@ is taken on trust. This
+-- exists for keys restricted to a forced rsync-only command, where running
+-- @test@ is refused: without the escape hatch the probe fails, the directory is
+-- reported missing, and every sync silently becomes a no-op.
+checkDirectory bnd _ True
+  | Just h <- remoteHost bnd
+  , not (h ^. hostCheckRemoteDir) =
+      pure True
 checkDirectory bnd path True =
   (ExitSuccess ==) . fstOf3
     <$> execute

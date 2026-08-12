@@ -52,6 +52,7 @@ Aliases:
 - **Variables** (optional): Map of variable names to values for path interpolation. Any number of variables can be defined
 - **Options** (optional): Extra **rsync** flags used for transfers involving this host
 - **SshOptions** (optional): Arguments for pushme's **own** ssh calls, inserted before the hostname
+- **CheckRemoteDirectory** (optional, default `true`): Whether to probe the remote directory with `test -d` before syncing
 
 ### SshOptions
 
@@ -83,6 +84,22 @@ generally needs *both*:
     Options:    ["--rsh=/path/to/ssh-wrapper"]
     SshOptions: ["-F", "/home/johnw/.config/pushme/ssh_config"]
 ```
+
+### CheckRemoteDirectory
+
+Set this to `false` for hosts whose key is restricted to a forced rsync-only
+command (an `rrsync`-style `command=` in `authorized_keys`). Such a key refuses
+to run `test`, so the probe fails and every sync silently becomes a no-op:
+
+```yaml
+Aliases:
+  locked-down:
+    Host: vault.example.com
+    CheckRemoteDirectory: false
+```
+
+The destination is then taken on trust; if it really is missing, rsync reports
+the error itself.
 
 ## Usage
 

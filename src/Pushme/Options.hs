@@ -141,6 +141,12 @@ data Alias = Alias
 
   >   SshOptions: ["-F", "/home/johnw/.config/pushme/ssh_config"]
   -}
+  , _aliasCheckRemoteDir :: Maybe Bool
+  {- ^ Whether to probe the remote directory with @test -d@ before syncing
+  (default 'True'). Set 'False' for hosts whose key is restricted to a
+  forced rsync-only command, where running @test@ is not permitted and
+  would otherwise make every sync a silent no-op.
+  -}
   }
   deriving (Show, Eq)
 
@@ -163,6 +169,7 @@ instance FromJSON Alias where
       <*> pure finalVariables
       <*> v .:? "Options"
       <*> v .:? "SshOptions"
+      <*> v .:? "CheckRemoteDirectory"
    where
     addContext msg = "Error parsing Alias: " ++ msg
   parseJSON _ = errorL "Error parsing Alias"
@@ -179,6 +186,7 @@ data HostRef = HostRef
   , _hostRefVariables :: Map Text Text
   , _hostRefOptions :: Maybe [Text] -- Per-host rsync options from alias
   , _hostRefSshOptions :: Maybe [Text] -- Per-host ssh options from alias
+  , _hostRefCheckRemoteDir :: Maybe Bool -- Nothing means the default, True
   }
   deriving (Show, Eq, Ord)
 
