@@ -17,7 +17,7 @@ import Control.Applicative ((<|>))
 import Control.Arrow ((&&&))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
-import Control.Concurrent.ParallelIO (parallel, parallel_, stopGlobalPool)
+import Control.Concurrent.ParallelIO (parallel, stopGlobalPool)
 import Control.Concurrent.QSem (QSem, newQSem, signalQSem, waitQSem)
 import Control.Exception (finally)
 import Control.Lens
@@ -51,7 +51,7 @@ import System.Directory (
   getHomeDirectory,
   listDirectory,
  )
-import System.Exit (ExitCode (..))
+import System.Exit (ExitCode (..), exitWith)
 import System.FilePath.Posix (
   takeExtension,
   (</>),
@@ -65,6 +65,34 @@ import Text.Show.Pretty (ppShow)
 
 data TransferStatus = TransferSuccess | TransferWarning | TransferError
   deriving (Show, Eq, Ord)
+
+{- | Worst status in a group, with an empty group counting as success.
+
+Guards against @maximum []@, which throws: a host can legitimately end up with
+no bindings at all.
+-}
+combinedStatus :: [TransferStatus] -> TransferStatus
+combinedStatus [] = TransferSuccess
+combinedStatus xs = maximum xs
+
+-- | Overall outcome of a run, mapped to a process exit code by 'main'.
+data RunResult
+  = RunCompleted TransferStatus
+  | RunUsageError
+  deriving (Show, Eq)
+
+{- | The process exit code for a run.
+
+'TransferWarning' is deliberately a SUCCESS: 'doRsync' maps it to rsync exit
+codes 23 and 24 (partial transfer, vanished source files), which are routine
+when mirroring a tree that is being modified concurrently. Failing on those
+would make the exit code useless for detecting real breakage.
+-}
+runResultExitCode :: RunResult -> ExitCode
+runResultExitCode RunUsageError = ExitFailure 2
+runResultExitCode (RunCompleted TransferError) = ExitFailure 1
+runResultExitCode (RunCompleted TransferWarning) = ExitSuccess
+runResultExitCode (RunCompleted TransferSuccess) = ExitSuccess
 
 data SyncDirection = Push | Pull
   deriving (Show, Eq, Ord)
@@ -263,9 +291,15 @@ main = withStdoutLogging do
   debug' $ "Config file options: " <> pack (ppShow configOpts)
   debug' $ "Initial composite options: " <> pack (ppShow opts)
 
-  runReaderT processBindings opts `finally` stopGlobalPool
+  -- stopGlobalPool must run before the exit code is acted on, so the worker
+  -- pool is always torn down cleanly. exitWith throws, so raising it outside
+  -- the bracket makes that ordering explicit rather than incidental.
+  result <- runReaderT processBindings opts `finally` stopGlobalPool
+  case runResultExitCode result of
+    ExitSuccess -> pure ()
+    code -> exitWith code
 
-processBindings :: App ()
+processBindings :: App RunResult
 processBindings = do
   opts <- ask
   case opts ^. optsCliArgs of
@@ -313,19 +347,23 @@ processBindings = do
             <> tshow (snd (there ^. hostRefActualHost))
             <> " receiving jobs"
         newQSem (snd (there ^. hostRefActualHost))
-      parallel_ do
+      hostStatuses <- parallel do
         (bnds, thereSlots) <- zip (M.toList bindings) thereSlotsAll
         pure (goHost opts hereSlots thereSlots bnds)
-    _ -> log' "Usage: pushme FROM TO..."
+      pure (RunCompleted (combinedStatus hostStatuses))
+    _ -> do
+      log' "Usage: pushme FROM TO..."
+      pure RunUsageError
  where
   -- Process all bindings for a single destination host
+  goHost :: Options -> QSem -> QSem -> (HostRef, [Binding]) -> IO TransferStatus
   goHost opts p q (there, bnds) = do
     -- Process all bindings for this host in parallel and collect statuses
     statuses <- parallel (map (go opts p q) bnds)
+    let overallStatus = combinedStatus statuses
     -- After all bindings for this host are done, print completion message
     unless (null bnds) $ do
-      let overallStatus = maximum statuses -- TransferError > TransferWarning > TransferSuccess
-          suffix = case overallStatus of
+      let suffix = case overallStatus of
             TransferSuccess -> ""
             TransferWarning -> " (with warnings)"
             TransferError -> " (with errors)"
@@ -340,6 +378,7 @@ processBindings = do
       -- Use log' for completion messages since they're informational
       -- (all transfers done), with color/suffix indicating status
       log' coloredMsg
+    pure overallStatus
 
   go :: Options -> QSem -> QSem -> Binding -> IO TransferStatus
   go opts p q bnd = do
