@@ -149,6 +149,10 @@ instance FromJSON Fileset where
 data Host = Host
   { _hostName :: Text
   , _hostMaxJobs :: Int
+  , _hostSshOptions :: [Text]
+  {- ^ Arguments placed before the hostname in pushme's own ssh calls.
+  Only reachable via an alias; a bare hostname gets the empty list.
+  -}
   }
   deriving (Show, Eq, Ord)
 
@@ -156,15 +160,18 @@ makeLenses ''Host
 
 parseHost :: Text -> Host
 parseHost name = case T.split (== '@') name of
-  [n] -> Host n 1
-  [n, j] -> Host n (read (unpack j))
+  [n] -> Host n 1 []
+  [n, j] -> Host n (read (unpack j)) []
   _ -> errorL $ "Cannot parse hostname: " <> name
 
 -- | Extract Host from HostRef for compatibility
 hostFromRef :: HostRef -> Host
 hostFromRef ref =
   let (name, jobs) = ref ^. hostRefActualHost
-   in Host name jobs
+   in Host
+        name
+        jobs
+        (fromMaybe [] (ref ^. hostRefSshOptions))
 
 {- | Parse a host reference from CLI argument, checking aliases first.
 Supports @N suffix for overriding MaxJobs on both raw hostnames and aliases.
@@ -191,6 +198,7 @@ parseHostRef opts name =
                 , _hostRefActualHost = (actualName, finalJobs)
                 , _hostRefVariables = alias ^. aliasVariables
                 , _hostRefOptions = alias ^. aliasOptions
+                , _hostRefSshOptions = alias ^. aliasSshOptions
                 }
         Nothing ->
           let host = parseHost baseName
@@ -200,6 +208,7 @@ parseHostRef opts name =
                 , _hostRefActualHost = (baseName, finalJobs)
                 , _hostRefVariables = M.empty
                 , _hostRefOptions = Nothing
+                , _hostRefSshOptions = Nothing
                 }
 
 {- | Interpolate all $variable references in a path using the provided variable map.
@@ -813,10 +822,16 @@ execute mhost cmdName args = do
     endTime <- getCurrentTime
     pure (diffUTCTime endTime startTime, a)
 
+  -- The host's ssh options are placed BEFORE the hostname, which is where ssh
+  -- requires its own arguments -- anything after the hostname is taken as part
+  -- of the remote command. Without these, pushme's ssh calls always fall back
+  -- to the invoking user's default ~/.ssh/config, so a host reachable only via
+  -- a jump host or a non-default config cannot be synced at all.
   remote :: Host -> (FilePath, [String]) -> (FilePath, [String])
   remote host (p, xs) =
     ( "ssh"
-    , unpack (host ^. hostName) : p : xs
+    , map unpack (host ^. hostSshOptions)
+        ++ (unpack (host ^. hostName) : p : xs)
     )
 
 -- Utility functions

@@ -132,6 +132,15 @@ data Alias = Alias
   , _aliasMaxJobs :: Maybe Int
   , _aliasVariables :: Map Text Text
   , _aliasOptions :: Maybe [Text]
+  , _aliasSshOptions :: Maybe [Text]
+  {- ^ Arguments inserted before the hostname in pushme's OWN ssh
+  invocations (see 'remote' in Main.hs). Distinct from '_aliasOptions',
+  which are rsync arguments: rsync's transport is chosen with @--rsh@ and
+  never consulted these. Needed when a host is reachable only through a
+  jump host or a non-default ssh config, e.g.
+
+  >   SshOptions: ["-F", "/home/johnw/.config/pushme/ssh_config"]
+  -}
   }
   deriving (Show, Eq)
 
@@ -153,6 +162,7 @@ instance FromJSON Alias where
       <$> v .:? "MaxJobs"
       <*> pure finalVariables
       <*> v .:? "Options"
+      <*> v .:? "SshOptions"
    where
     addContext msg = "Error parsing Alias: " ++ msg
   parseJSON _ = errorL "Error parsing Alias"
@@ -168,6 +178,7 @@ data HostRef = HostRef
   , _hostRefActualHost :: (Text, Int) -- (hostName, maxJobs) - avoiding circular dependency
   , _hostRefVariables :: Map Text Text
   , _hostRefOptions :: Maybe [Text] -- Per-host rsync options from alias
+  , _hostRefSshOptions :: Maybe [Text] -- Per-host ssh options from alias
   }
   deriving (Show, Eq, Ord)
 

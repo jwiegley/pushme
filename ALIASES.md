@@ -50,6 +50,39 @@ Aliases:
 - **Host** (required): The actual hostname or IP to connect to. Can include `@N` notation for jobs (e.g., `vulcan@8`)
 - **MaxJobs** (optional): Number of parallel transfers for this host. Defaults to 1 if not specified
 - **Variables** (optional): Map of variable names to values for path interpolation. Any number of variables can be defined
+- **Options** (optional): Extra **rsync** flags used for transfers involving this host
+- **SshOptions** (optional): Arguments for pushme's **own** ssh calls, inserted before the hostname
+
+### SshOptions
+
+pushme runs a small number of commands on the remote host itself — currently
+`test -d`, to confirm the destination exists before transferring. Those calls
+use a plain `ssh <host> <command>`, which means they consult the invoking
+user's default `~/.ssh/config` and nothing else.
+
+`SshOptions` supplies arguments for exactly those calls, placed **before** the
+hostname (where ssh requires its own arguments; anything after the hostname is
+taken as part of the remote command):
+
+```yaml
+Aliases:
+  andoria:
+    Host: andoria-08
+    SshOptions: ["-F", "/home/johnw/.config/pushme/ssh_config"]
+```
+
+Without this, a host reachable only through a jump host cannot be synced at
+all: the probe fails with `Could not resolve hostname`, and the transfer is
+skipped as "remote directory missing".
+
+**`SshOptions` is not `Options`.** `Options` are rsync flags. rsync chooses its
+own transport with `--rsh` and never sees `SshOptions`, so a jump-host setup
+generally needs *both*:
+
+```yaml
+    Options:    ["--rsh=/path/to/ssh-wrapper"]
+    SshOptions: ["-F", "/home/johnw/.config/pushme/ssh_config"]
+```
 
 ## Usage
 

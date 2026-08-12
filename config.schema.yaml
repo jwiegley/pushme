@@ -56,6 +56,13 @@ alias:
   # Optional: additional rsync flags passed for transfers involving this host
   Options: list(str(), required=False)
 
+  # Optional: arguments for pushme's OWN ssh calls, inserted before the
+  # hostname. Distinct from Options, which are rsync flags -- rsync selects its
+  # transport with --rsh and never sees these. Required when a host is only
+  # reachable through a jump host or a non-default ssh config, e.g.
+  #   SshOptions: ["-F", "/home/johnw/.config/pushme/ssh_config"]
+  SshOptions: list(str(), required=False)
+
 ---
 # Reusable schema for RsyncOptions
 # Used in GlobalOptions, Fileset Common, and Store definitions
