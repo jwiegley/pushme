@@ -17,7 +17,7 @@ import Options.Applicative hiding (Success)
 import Text.Regex.Posix ((=~))
 
 version :: String
-version = "3.0.0"
+version = "3.1.0"
 
 copyright :: String
 copyright = "2012-2026"

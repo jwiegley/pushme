@@ -1,5 +1,5 @@
 name:       pushme
-version:    3.0.0
+version:    3.1.0
 synopsis:   Synchronize multiple filesets across machines using rsync
 github:     jwiegley/pushme
 author:     John Wiegley

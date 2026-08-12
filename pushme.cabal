@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: ec3b8998caf30037041e5c733c94e671e9ae99c03fc0743bf26820aa830b0e42
+-- hash: e7cca68ebf44c964ff3417c2fb2c7748cb9f6d64fa5bf53af159c95ea5c65276
 
 name:           pushme
-version:        3.0.0
+version:        3.1.0
 synopsis:       Synchronize multiple filesets across machines using rsync
 description:    pushme is a wrapper around rsync allowing declarative filesets to be transferred between machines. The screenshot above shows pushme in action (where `push` is a script I use to call `pushme` with appropriate arguments based on which machine I'm running it from).
 category:       System

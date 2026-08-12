@@ -1,4 +1,4 @@
-# pushme v3.0.0
+# pushme v3.1.0
 
 ![Image of pushme in operation](./pushall-example.jpg)
 
